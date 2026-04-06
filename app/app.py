@@ -843,6 +843,10 @@ def run_now():
     flash(f"Run complete ({'dry run' if dry_run else 'live'}). Check the log below.", "success")
     return redirect(url_for("dashboard"))
 
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok"}), 200
+
 @app.route("/api/state")
 @login_required
 def api_state():
