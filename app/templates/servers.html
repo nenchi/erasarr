@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}Media Servers — Erasarr{% endblock %}
+{% block page_title %}Media Servers{% endblock %}
+{% block page_sub %}Connect Emby and Jellyfin instances{% endblock %}
+
+{% block content %}
+<!-- Add Server -->
+<div class="card">
+  <div class="card-title">◈ Add Media Server</div>
+  <form method="POST">
+    <input type="hidden" name="action" value="add_server">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Display Name</label>
+        <input class="form-input" type="text" name="name" placeholder="My Jellyfin" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-select" name="type" id="server-type-select">
+          <option value="jellyfin">Jellyfin</option>
+          <option value="emby">Emby</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Address</label>
+        <input class="form-input" type="text" name="address" id="server-address" placeholder="http://192.168.1.100:8096" required>
+        <div class="form-hint">Include http:// and port. No trailing slash.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input class="form-input" type="text" name="api_key" id="server-apikey" placeholder="Your API key">
+        <div class="form-hint">Jellyfin: Dashboard → API Keys. Emby: Dashboard → API Keys.</div>
+      </div>
+    </div>
+    <div class="btn-group">
+      <button type="submit" class="btn btn-primary">+ Add Server</button>
+      <button type="button" class="btn btn-ghost" onclick="testServer()">⚡ Test Connection</button>
+      <button type="button" class="btn btn-ghost" onclick="fetchUsers()">👥 Fetch Users</button>
+      <span class="test-result" id="test-result"></span>
+    </div>
+  </form>
+</div>
+
+<!-- Existing Servers -->
+{% if cfg.media_servers %}
+<div class="card">
+  <div class="card-title">◉ Connected Servers</div>
+  <table class="table">
+    <thead>
+      <tr><th>Name</th><th>Type</th><th>Address</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for server in cfg.media_servers %}
+      <tr id="srow-{{ server.id }}">
+        <td style="font-weight:500">{{ server.name }}</td>
+        <td><span class="badge badge-blue">{{ server.type.upper() }}</span></td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ server.address }}</td>
+        <td>
+          <form method="POST" style="display:inline">
+            <input type="hidden" name="action" value="toggle_server">
+            <input type="hidden" name="server_id" value="{{ server.id }}">
+            <button type="submit" class="btn btn-ghost btn-sm">
+              {% if server.enabled %}<span class="dot dot-green"></span> Enabled
+              {% else %}<span class="dot dot-gray"></span> Disabled{% endif %}
+            </button>
+          </form>
+        </td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm"
+              onclick="openEditServer('{{ server.id }}','{{ server.name|e }}','{{ server.type }}','{{ server.address|e }}','{{ server.api_key|e }}')">Edit</button>
+            <form method="POST" onsubmit="return confirm('Remove this server?')" style="display:inline">
+              <input type="hidden" name="action" value="remove_server">
+              <input type="hidden" name="server_id" value="{{ server.id }}">
+              <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- User Preview -->
+<div id="user-preview" style="display:none" class="card">
+  <div class="card-title">👥 Users Found</div>
+  <div id="user-list"></div>
+</div>
+
+<!-- Edit Server Modal -->
+<div class="modal-overlay hidden" id="edit-server-overlay" onclick="closeEditServer(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeEditServer()">✕</button>
+    <div class="modal-title">Edit Media Server</div>
+    <input type="hidden" id="edit-server-id">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Display Name</label>
+        <input class="form-input" type="text" id="edit-server-name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-select" id="edit-server-type">
+          <option value="jellyfin">Jellyfin</option>
+          <option value="emby">Emby</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Address</label>
+        <input class="form-input" type="text" id="edit-server-address" placeholder="http://192.168.1.100:8096">
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input class="form-input" type="text" id="edit-server-apikey" placeholder="Your API key">
+      </div>
+    </div>
+    <div class="btn-group" style="margin-top:12px">
+      <button type="button" class="btn btn-ghost" onclick="testEditServer()">⚡ Test Connection</button>
+      <button type="button" class="btn btn-ghost" onclick="fetchEditUsers()">👥 Fetch Users</button>
+      <span class="test-result" id="edit-test-result"></span>
+    </div>
+    <div id="edit-user-preview" style="display:none;margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;max-height:180px;overflow-y:auto">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Users on this server:</div>
+      <div id="edit-user-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveEditServer()">Save Changes</button>
+      <button class="btn btn-ghost" onclick="closeEditServer()">Cancel</button>
+      <span id="edit-save-result" style="margin-left:auto;font-size:12px"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+function getFormData() {
+  return {
+    type: document.getElementById('server-type-select').value,
+    address: document.getElementById('server-address').value,
+    api_key: document.getElementById('server-apikey').value,
+  };
+}
+
+async function testServer() {
+  const el = document.getElementById('test-result');
+  el.textContent = 'Testing...';
+  el.className = 'test-result';
+  try {
+    const r = await fetch('/api/test-server', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(getFormData())
+    });
+    const d = await r.json();
+    el.textContent = d.ok ? '✓ ' + d.msg : '✗ ' + d.msg;
+    el.className = 'test-result ' + (d.ok ? 'test-ok' : 'test-fail');
+  } catch(e) {
+    el.textContent = '✗ Request failed';
+    el.className = 'test-result test-fail';
+  }
+}
+
+async function fetchUsers() {
+  const el = document.getElementById('test-result');
+  el.textContent = 'Fetching users...';
+  el.className = 'test-result';
+  try {
+    const r = await fetch('/api/server-users', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(getFormData())
+    });
+    const d = await r.json();
+    if (d.ok) {
+      el.textContent = `✓ Found ${d.users.length} users`;
+      el.className = 'test-result test-ok';
+      const list = document.getElementById('user-list');
+      list.innerHTML = d.users.map(u =>
+        `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;">
+          <strong>${u.name}</strong> <span style="color:var(--muted);font-size:11px;font-family:var(--mono)">${u.id}</span>
+        </div>`
+      ).join('');
+      document.getElementById('user-preview').style.display = 'block';
+    } else {
+      el.textContent = '✗ ' + d.msg;
+      el.className = 'test-result test-fail';
+    }
+  } catch(e) {
+    el.textContent = '✗ Request failed';
+    el.className = 'test-result test-fail';
+  }
+}
+
+// Edit modal
+function openEditServer(id, name, type, address, apiKey) {
+  document.getElementById('edit-server-id').value = id;
+  document.getElementById('edit-server-name').value = name;
+  document.getElementById('edit-server-type').value = type;
+  document.getElementById('edit-server-address').value = address;
+  document.getElementById('edit-server-apikey').value = apiKey;
+  document.getElementById('edit-test-result').textContent = '';
+  document.getElementById('edit-user-preview').style.display = 'none';
+  document.getElementById('edit-save-result').textContent = '';
+  document.getElementById('edit-server-overlay').classList.remove('hidden');
+}
+
+function closeEditServer(e) {
+  if (e && e.target !== document.getElementById('edit-server-overlay')) return;
+  document.getElementById('edit-server-overlay').classList.add('hidden');
+}
+
+function getEditServerData() {
+  return {
+    type: document.getElementById('edit-server-type').value,
+    address: document.getElementById('edit-server-address').value,
+    api_key: document.getElementById('edit-server-apikey').value,
+  };
+}
+
+async function testEditServer() {
+  const el = document.getElementById('edit-test-result');
+  el.textContent = 'Testing...'; el.className = 'test-result';
+  const r = await fetch('/api/test-server', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(getEditServerData())
+  });
+  const d = await r.json();
+  el.textContent = d.ok ? '✓ ' + d.msg : '✗ ' + d.msg;
+  el.className = 'test-result ' + (d.ok ? 'test-ok' : 'test-fail');
+}
+
+async function fetchEditUsers() {
+  const el = document.getElementById('edit-test-result');
+  el.textContent = 'Fetching...'; el.className = 'test-result';
+  const r = await fetch('/api/server-users', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(getEditServerData())
+  });
+  const d = await r.json();
+  if (d.ok) {
+    el.textContent = `✓ Found ${d.users.length} users`; el.className = 'test-result test-ok';
+    document.getElementById('edit-user-list').innerHTML = d.users.map(u =>
+      `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <strong>${u.name}</strong> <span style="color:var(--muted);font-family:var(--mono)">${u.id}</span>
+      </div>`
+    ).join('');
+    document.getElementById('edit-user-preview').style.display = 'block';
+  } else {
+    el.textContent = '✗ ' + d.msg; el.className = 'test-result test-fail';
+  }
+}
+
+async function saveEditServer() {
+  const el = document.getElementById('edit-save-result');
+  el.textContent = 'Saving...'; el.style.color = 'var(--muted)';
+  const payload = {
+    id: document.getElementById('edit-server-id').value,
+    name: document.getElementById('edit-server-name').value,
+    ...getEditServerData(),
+  };
+  try {
+    const r = await fetch('/api/update-server', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (d.ok) { window.location.reload(); }
+    else { el.textContent = '✗ Save failed'; el.style.color = 'var(--danger)'; }
+  } catch(e) {
+    el.textContent = '✗ Request failed'; el.style.color = 'var(--danger)';
+  }
+}
+</script>
+{% endblock %}

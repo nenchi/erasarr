@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Erasarr — Create Account</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0f12; --surface: #141720; --border: #252a3a;
+  --accent: #4f9cf9; --accent2: #7c5cfc; --danger: #f94f6d;
+  --success: #4fda8e; --text: #e2e8f0; --muted: #64748b;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wrap {
+  width: 100%;
+  max-width: 420px;
+  padding: 24px;
+}
+.logo {
+  text-align: center;
+  margin-bottom: 40px;
+}
+.logo .wordmark {
+  font-family: 'Space Mono', monospace;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -1px;
+}
+.logo .sub {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+}
+.card h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+.card .desc { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+.form-group { margin-bottom: 16px; }
+.form-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.form-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color .15s;
+}
+.form-input:focus { border-color: var(--accent); }
+.form-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.btn-primary {
+  width: 100%;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 11px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+  font-family: 'Inter', sans-serif;
+  transition: background .15s;
+}
+.btn-primary:hover { background: #3b82e0; }
+.flash-error {
+  background: rgba(249,79,109,.1);
+  border: 1px solid rgba(249,79,109,.3);
+  color: var(--danger);
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.flash-success {
+  background: rgba(79,218,142,.1);
+  border: 1px solid rgba(79,218,142,.3);
+  color: var(--success);
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.setup-badge {
+  display: inline-block;
+  background: rgba(124,92,252,.12);
+  border: 1px solid rgba(124,92,252,.25);
+  color: var(--accent2);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 99px;
+  margin-bottom: 16px;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">
+    <div class="wordmark">Erasarr</div>
+    <div class="sub">Media Cleanup Automation</div>
+  </div>
+  <div class="card">
+    <div class="setup-badge">First Setup</div>
+    <h2>Create your account</h2>
+    <p class="desc">Choose a username and password. This will be the admin account used to access Erasarr.</p>
+
+    {% for cat, msg in get_flashed_messages(with_categories=true) %}
+    <div class="flash-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+
+    <form method="POST">
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-input" type="text" name="username" autocomplete="username"
+          placeholder="e.g. admin" required autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" type="password" name="password"
+          autocomplete="new-password" minlength="8" required>
+        <div class="form-hint">Minimum 8 characters</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <input class="form-input" type="password" name="confirm_password"
+          autocomplete="new-password" minlength="8" required>
+      </div>
+      <button class="btn-primary" type="submit">Create Account &amp; Get Started →</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

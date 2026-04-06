@@ -1,0 +1,627 @@
+{% extends "base.html" %}
+{% block title %}Actions — Erasarr{% endblock %}
+{% block page_title %}Actions{% endblock %}
+{% block page_sub %}Configure actions and schedule{% endblock %}
+
+{% block content %}
+<!-- Action Rules -->
+<div class="card">
+  <div class="card-title" style="justify-content:space-between;align-items:center;">
+    <span>⚡ Actions</span>
+    <button onclick="openRuleModal(null)" class="btn btn-sm btn-primary" style="margin-left:auto">+ Add Action</button>
+  </div>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">
+    Each action defines what happens when users watch media. Actions are processed in order — create different actions for different users, content types, or conditions.
+  </p>
+
+  {% if cfg.action_rules %}
+  <table class="table">
+    <thead>
+      <tr><th>Name</th><th>Content</th><th>Users</th><th>Servers</th><th>Actions</th><th>Schedule</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for rule in cfg.action_rules %}
+      <tr>
+        <td style="font-weight:500">{{ rule.name }}</td>
+        <td>
+          {% if rule.content_type == 'movies' %}<span class="badge badge-blue">Movies</span>
+          {% elif rule.content_type == 'episodes' %}<span class="badge badge-blue">Episodes</span>
+          {% else %}<span class="badge badge-gray">All</span>{% endif %}
+        </td>
+        <td>
+          {% if not rule.applies_to_users %}
+            <span class="badge badge-gray">All Users</span>
+          {% else %}
+            <span class="badge badge-blue">{{ rule.applies_to_users | length }} selected</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if not rule.applies_to_servers %}
+            <span class="badge badge-gray">All</span>
+          {% else %}
+            <span class="badge badge-blue">{{ rule.applies_to_servers | length }} server(s)</span>
+          {% endif %}
+        </td>
+        <td style="font-size:12px;color:var(--muted);max-width:220px;">
+          {% set acts = namespace(list=[]) %}
+          {% if rule.actions.unmonitor %}{% set acts.list = acts.list + ['Unmonitor'] %}{% endif %}
+          {% if rule.actions.delete_file %}{% set acts.list = acts.list + ['Delete file'] %}{% endif %}
+          {% if rule.actions.delete_from_emby %}{% set acts.list = acts.list + ['Delete from Emby'] %}{% endif %}
+          {% if rule.actions.require_all_users_watched %}{% set acts.list = acts.list + ['Require all watched'] %}{% endif %}
+          {% if rule.actions.keep_last_by_watch_time %}{% set acts.list = acts.list + ['Keep-last by time'] %}{% endif %}
+          {% if rule.actions.add_tag %}{% set acts.list = acts.list + ['Tag: ' + rule.actions.add_tag] %}{% endif %}
+          {% if rule.actions.delay_days %}{% set acts.list = acts.list + [rule.actions.delay_days | string + 'd delay'] %}{% endif %}
+          {% if rule.actions.keep_last_episodes %}{% set acts.list = acts.list + ['Keep last ' + rule.actions.keep_last_episodes | string + ' eps'] %}{% endif %}
+          {{ acts.list | join(', ') or '— no actions —' }}
+        </td>
+        <td>
+          {% set rs = rule.get('schedule', {}) %}
+          {% if rs.get('use_global', true) or not rs %}
+            <span class="badge badge-gray">Default</span>
+          {% elif rs.get('mode') == 'interval' %}
+            <span class="badge badge-blue">Every {{ rs.get('interval_hours', 24) }}h</span>
+          {% elif rs.get('mode') == 'daily' %}
+            <span class="badge badge-blue" style="font-size:10px;font-family:var(--mono)">{{ rs.get('cron', '0 3 * * *') }}</span>
+          {% elif rs.get('mode') == 'monthly' %}
+            <span class="badge badge-blue">Day {{ rs.get('day_of_month', 1) }}</span>
+          {% else %}
+            <span class="badge badge-gray">Manual</span>
+          {% endif %}
+        </td>
+        <td>
+          <span class="badge {{ 'badge-green' if rule.get('enabled', True) else 'badge-gray' }}">
+            {{ 'enabled' if rule.get('enabled', True) else 'disabled' }}
+          </span>
+        </td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:nowrap">
+            <button class="btn btn-ghost btn-sm" onclick="openRuleModal('{{ rule.id }}')">Edit</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleRule('{{ rule.id }}')">
+              {{ 'Disable' if rule.get('enabled', True) else 'Enable' }}
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="deleteRule('{{ rule.id }}', '{{ rule.name | e }}')">Remove</button>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="text-align:center;padding:40px 20px;color:var(--muted);">
+    <div style="font-size:32px;margin-bottom:12px;">⚡</div>
+    <div style="font-size:14px;margin-bottom:8px;">No actions configured yet.</div>
+    <div style="font-size:12px;margin-bottom:20px;">Add an action to define what happens when media is watched.</div>
+    <button onclick="openRuleModal(null)" class="btn btn-primary">+ Add First Action</button>
+  </div>
+  {% endif %}
+</div>
+
+<hr class="divider">
+
+<!-- Schedule -->
+<form method="POST">
+<input type="hidden" name="action" value="save_schedule">
+<div class="card">
+  <div class="card-title">🕐 Default Schedule</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">Applied to all actions without a custom schedule override.</div>
+
+  <div class="radio-group">
+    <label class="radio-item">
+      <input type="radio" name="schedule_mode" value="manual"
+        {% if cfg.get('schedule',{}).get('mode','manual') == 'manual' %}checked{% endif %}>
+      <div>
+        <div class="radio-label">Manual Only</div>
+        <div class="radio-desc">Run only when you click "Run Now" in the dashboard</div>
+      </div>
+    </label>
+
+    <label class="radio-item">
+      <input type="radio" name="schedule_mode" value="interval"
+        {% if cfg.get('schedule',{}).get('mode') == 'interval' %}checked{% endif %}>
+      <div style="flex:1">
+        <div class="radio-label">Every N Hours</div>
+        <div class="radio-desc">Run on a fixed interval</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+          <input class="form-input" type="number" name="interval_hours" min="1" max="168"
+            value="{{ cfg.get('schedule',{}).get('interval_hours', 24) }}"
+            style="width:100px;" placeholder="24">
+          <span style="color:var(--muted);font-size:13px;">hours</span>
+        </div>
+      </div>
+    </label>
+
+    <label class="radio-item">
+      <input type="radio" name="schedule_mode" value="daily"
+        {% if cfg.get('schedule',{}).get('mode') == 'daily' %}checked{% endif %}>
+      <div style="flex:1">
+        <div class="radio-label">Cron Schedule</div>
+        <div class="radio-desc">Custom cron expression — full control over timing</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+          <input class="form-input" type="text" name="cron_expr"
+            value="{{ cfg.get('schedule',{}).get('cron', '0 3 * * *') }}"
+            style="width:200px;font-family:var(--mono)" placeholder="0 3 * * *">
+          <span style="color:var(--muted);font-size:12px;">min hour day month weekday</span>
+        </div>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted);">
+          Examples: <code style="color:var(--accent)">0 3 * * *</code> = 3am daily &nbsp;|&nbsp;
+          <code style="color:var(--accent)">0 3 * * 1</code> = 3am Mondays
+        </div>
+      </div>
+    </label>
+
+    <label class="radio-item">
+      <input type="radio" name="schedule_mode" value="monthly"
+        {% if cfg.get('schedule',{}).get('mode') == 'monthly' %}checked{% endif %}>
+      <div style="flex:1">
+        <div class="radio-label">Monthly</div>
+        <div class="radio-desc">Run once a month on a specific day at 3:00 AM</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+          <span style="color:var(--muted);font-size:13px;">Day</span>
+          <input class="form-input" type="number" name="day_of_month" min="1" max="28"
+            value="{{ cfg.get('schedule',{}).get('day_of_month', 1) }}"
+            style="width:80px;">
+          <span style="color:var(--muted);font-size:13px;">of each month</span>
+        </div>
+      </div>
+    </label>
+  </div>
+</div>
+
+<div class="btn-group">
+  <button type="submit" class="btn btn-primary">Save Schedule</button>
+</div>
+</form>
+
+<!-- ── Rule Modal ── -->
+<div class="modal-overlay hidden" id="rule-modal-overlay" onclick="closeRuleModal(event)">
+  <div class="modal" style="width:min(680px,94vw)">
+    <button class="modal-close" onclick="closeRuleModal()">✕</button>
+    <div class="modal-title" id="rule-modal-title">Add Rule</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Rule Name</label>
+        <input class="form-input" type="text" id="rule-name" placeholder="e.g. Cleanup after watched">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Content Type</label>
+        <select class="form-select" id="rule-content-type">
+          <option value="all">All (Movies + Episodes)</option>
+          <option value="movies">Movies only</option>
+          <option value="episodes">Episodes only</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Precondition Tag <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+      <input class="form-input" type="text" id="rule-precondition-tag"
+        placeholder="e.g. erasarr — leave empty to match all media">
+      <div class="form-hint">Only process items that have this tag in Radarr/Sonarr. Leave empty to process all watched items.</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Apply to Media Servers</label>
+      <label class="check-item" style="background:var(--surface2);border-radius:6px;margin-bottom:6px;padding:10px 12px;">
+        <input type="checkbox" id="rule-all-servers" onchange="toggleRuleAllServers(this)"
+          style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex-shrink:0">
+        <div>
+          <div class="check-item-label" style="font-weight:600">All Servers</div>
+          <div class="check-item-sub">Apply rules to watch history from all connected media servers</div>
+        </div>
+      </label>
+      <div id="rule-servers-list" class="check-list"
+        style="border:1px solid var(--border);border-radius:6px;padding:4px;max-height:120px;">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Apply to Users</label>
+      <label class="check-item" style="background:var(--surface2);border-radius:6px;margin-bottom:6px;padding:10px 12px;">
+        <input type="checkbox" id="rule-all-users" onchange="toggleRuleAllUsers(this)"
+          style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex-shrink:0">
+        <div>
+          <div class="check-item-label" style="font-weight:600">All Users</div>
+          <div class="check-item-sub">Apply to watch history from every user on all connected servers</div>
+        </div>
+      </label>
+      <div id="rule-users-list" class="check-list"
+        style="border:1px solid var(--border);border-radius:6px;padding:4px;max-height:150px;">
+      </div>
+    </div>
+
+    <div style="margin-top:4px;">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">Actions</div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Unmonitor</div>
+          <div class="toggle-desc">Stop Radarr/Sonarr from searching for upgrades</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="rule-unmonitor"><span class="toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Delete File</div>
+          <div class="toggle-desc">Delete the media file from disk after watched ⚠ irreversible</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="rule-delete-file"><span class="toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Delete Directly from Emby/Jellyfin</div>
+          <div class="toggle-desc">Also delete watched <strong>episodes not in Sonarr</strong> — removes the file via the media server API. Movies and Sonarr-managed shows are unaffected. <span style="color:var(--warn)">⚠ Only active when Precondition Tag is blank.</span></div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="rule-delete-from-emby"><span class="toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Require All Users Watched</div>
+          <div class="toggle-desc">Only process an episode when <strong>every user</strong> covered by this rule has watched it — prevents removing episodes others haven't seen yet</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="rule-require-all-watched"><span class="toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Keep Last N by Watch Time</div>
+          <div class="toggle-desc">When enabled, <em>Keep Last N Episodes</em> protects the N most recently <strong>watched</strong> episodes (by timestamp). When off (default), protects the N highest-numbered episodes in Sonarr.</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="rule-keep-last-by-time"><span class="toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="form-row" style="margin-top:14px;">
+        <div class="form-group">
+          <label class="form-label">Add Tag After Processing</label>
+          <input class="form-input" type="text" id="rule-add-tag" placeholder="e.g. processed, watched">
+          <div class="form-hint">Tag will be created if it doesn't exist in Radarr/Sonarr</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Delay After Watched (days)</label>
+          <input class="form-input" type="number" id="rule-delay-days" min="0" max="365" value="0">
+          <div class="form-hint">Wait N days before acting. 0 = act immediately.</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Keep Last N Episodes on Disk
+          <span style="font-weight:400;color:var(--muted)">(per series — episodes only)</span>
+        </label>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <input class="form-input" type="number" id="rule-keep-last" min="0" max="999"
+            value="0" style="width:110px;">
+          <span style="color:var(--muted);font-size:12px;">episodes &nbsp;(0 = disabled)</span>
+        </div>
+        <div class="form-hint">The N most recently watched episodes per show will be kept on disk and not deleted. Unmonitor still applies to all episodes.</div>
+      </div>
+    </div>
+
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-top:4px;font-size:12px;color:var(--muted);">
+      <div style="font-weight:700;color:var(--fg);margin-bottom:8px;">&#8505; Actions &amp; Feature Compatibility</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:4px 8px 4px 0;border-bottom:1px solid var(--border);color:var(--fg);">Feature</th>
+            <th style="text-align:center;padding:4px 6px;border-bottom:1px solid var(--border);color:var(--fg);">Episodes</th>
+            <th style="text-align:center;padding:4px 6px;border-bottom:1px solid var(--border);color:var(--fg);">Movies</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:4px 8px 4px 0;">Precondition tag (Sonarr/Radarr)</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+          </tr>
+          <tr style="background:var(--surface);">
+            <td style="padding:4px 8px 4px 0;">User filter (applies-to-users)</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+          </tr>
+          <tr>
+            <td style="padding:4px 8px 4px 0;">Require all users watched</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+          </tr>
+          <tr style="background:var(--surface);">
+            <td style="padding:4px 8px 4px 0;">Delay (days after watched)</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+          </tr>
+          <tr>
+            <td style="padding:4px 8px 4px 0;">Add tag on action</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+          </tr>
+          <tr style="background:var(--surface);">
+            <td style="padding:4px 8px 4px 0;">Unmonitor in Sonarr/Radarr</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+          </tr>
+          <tr>
+            <td style="padding:4px 8px 4px 0;">Delete file via Sonarr/Radarr</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+            <td style="text-align:center;color:#4caf50">&#10003;</td>
+          </tr>
+          <tr style="background:var(--surface);">
+            <td style="padding:4px 8px 4px 0;">Delete directly from Emby/Jellyfin</td>
+            <td style="text-align:center;color:#4caf50">&#10003; <span style="font-size:10px;">(non-Sonarr shows only)</span></td>
+            <td style="text-align:center;color:#888">&#8212;</td>
+          </tr>
+          <tr>
+            <td style="padding:4px 8px 4px 0;">Keep Last N Episodes</td>
+            <td style="text-align:center;color:#4caf50">&#10003; <span style="font-size:10px;">(per series)</span></td>
+            <td style="text-align:center;color:#888">&#8212;</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <hr style="border-color:var(--border);margin:20px 0">
+    <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">Schedule Override</div>
+    <label class="check-item" style="background:var(--surface2);border-radius:6px;margin-bottom:8px;padding:10px 12px;">
+      <input type="checkbox" id="rule-use-global-sched" onchange="toggleRuleScheduleSection(this)"
+        style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex-shrink:0">
+      <div>
+        <div class="check-item-label" style="font-weight:600">Use Default Schedule</div>
+        <div class="check-item-sub">Trigger this action on the global default schedule</div>
+      </div>
+    </label>
+    <div id="rule-schedule-options" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:4px;">
+      <div class="radio-group">
+        <label class="radio-item" style="padding:8px 10px">
+          <input type="radio" name="rule_sched_mode" value="manual">
+          <div>
+            <div class="radio-label">Manual Only</div>
+            <div class="radio-desc">Only when triggered manually</div>
+          </div>
+        </label>
+        <label class="radio-item" style="padding:8px 10px">
+          <input type="radio" name="rule_sched_mode" value="interval">
+          <div style="flex:1">
+            <div class="radio-label">Every N Hours</div>
+            <div class="radio-desc">Fixed interval</div>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+              <input class="form-input" type="number" id="rule-sched-hours" min="1" max="168" value="24" style="width:90px;">
+              <span style="color:var(--muted);font-size:13px;">hours</span>
+            </div>
+          </div>
+        </label>
+        <label class="radio-item" style="padding:8px 10px">
+          <input type="radio" name="rule_sched_mode" value="daily">
+          <div style="flex:1">
+            <div class="radio-label">Cron Schedule</div>
+            <div class="radio-desc">Custom cron expression</div>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+              <input class="form-input" type="text" id="rule-sched-cron" value="0 3 * * *"
+                style="width:170px;font-family:var(--mono)">
+              <span style="color:var(--muted);font-size:11px;">min hr day mon dow</span>
+            </div>
+          </div>
+        </label>
+        <label class="radio-item" style="padding:8px 10px">
+          <input type="radio" name="rule_sched_mode" value="monthly">
+          <div style="flex:1">
+            <div class="radio-label">Monthly</div>
+            <div class="radio-desc">Once a month at 3:00 AM</div>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+              <span style="color:var(--muted);font-size:13px;">Day</span>
+              <input class="form-input" type="number" id="rule-sched-dom" min="1" max="28" value="1" style="width:70px;">
+              <span style="color:var(--muted);font-size:13px;">of each month</span>
+            </div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveRule()">Save Rule</button>
+      <button class="btn btn-ghost" onclick="closeRuleModal()">Cancel</button>
+      <span id="rule-save-result" style="margin-left:auto;font-size:12px;font-weight:500;"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+const allUsers = {{ all_users | tojson }};
+const allServers = {{ cfg.media_servers | tojson }};
+const rulesData = {{ cfg.action_rules | tojson }};
+let currentEditRuleId = null;
+
+function openRuleModal(ruleId) {
+  currentEditRuleId = ruleId;
+    document.getElementById('rule-modal-title').textContent = ruleId ? 'Edit Action' : 'Add Action';
+  document.getElementById('rule-save-result').textContent = '';
+
+  const serversList = document.getElementById('rule-servers-list');
+  if (allServers.length === 0) {
+    serversList.innerHTML = '<div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">No media servers configured yet</div>';
+  } else {
+    serversList.innerHTML = allServers.map(s => `
+      <label class="check-item" style="cursor:pointer">
+        <input type="checkbox" class="rule-server-cb" value="${s.id}"
+          style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex-shrink:0">
+        <div>
+          <div class="check-item-label">${s.name || s.type}</div>
+          <div class="check-item-sub">${s.type.toUpperCase()} · ${s.address}</div>
+        </div>
+      </label>`).join('');
+  }
+
+  const usersList = document.getElementById('rule-users-list');
+  if (allUsers.length === 0) {
+    usersList.innerHTML = '<div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">No servers configured yet — add a media server first</div>';
+  } else {
+    usersList.innerHTML = allUsers.map(u => `
+      <label class="check-item" style="cursor:pointer">
+        <input type="checkbox" class="rule-user-cb" value="${u.key}"
+          style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex-shrink:0">
+        <div>
+          <div class="check-item-label">${u.user_name}</div>
+          <div class="check-item-sub">${u.server_name}</div>
+        </div>
+      </label>`).join('');
+  }
+
+  if (ruleId) {
+    const rule = rulesData.find(r => r.id === ruleId);
+    if (!rule) return;
+    document.getElementById('rule-name').value = rule.name || '';
+    document.getElementById('rule-content-type').value = rule.content_type || 'all';
+    document.getElementById('rule-precondition-tag').value = rule.precondition_tag || '';
+    const acts = rule.actions || {};
+    document.getElementById('rule-unmonitor').checked = !!acts.unmonitor;
+    document.getElementById('rule-delete-file').checked = !!acts.delete_file;
+    document.getElementById('rule-delete-from-emby').checked = !!acts.delete_from_emby;
+    document.getElementById('rule-require-all-watched').checked = !!acts.require_all_users_watched;
+    document.getElementById('rule-keep-last-by-time').checked = !!acts.keep_last_by_watch_time;
+    document.getElementById('rule-add-tag').value = acts.add_tag || '';
+    document.getElementById('rule-delay-days').value = acts.delay_days || 0;
+    document.getElementById('rule-keep-last').value = acts.keep_last_episodes || 0;
+    const applies = new Set(rule.applies_to_users || []);
+    const allCb = document.getElementById('rule-all-users');
+    allCb.checked = applies.size === 0;
+    document.querySelectorAll('.rule-user-cb').forEach(cb => { cb.checked = applies.has(cb.value); });
+    toggleRuleAllUsers(allCb);
+    const serverApplies = new Set(rule.applies_to_servers || []);
+    const allServersCb = document.getElementById('rule-all-servers');
+    allServersCb.checked = serverApplies.size === 0;
+    document.querySelectorAll('.rule-server-cb').forEach(cb => { cb.checked = serverApplies.has(cb.value); });
+    toggleRuleAllServers(allServersCb);
+    // Schedule
+    const rSched = rule.schedule || {use_global: true};
+    const useGlobalSchedCb = document.getElementById('rule-use-global-sched');
+    useGlobalSchedCb.checked = rSched.use_global !== false;
+    toggleRuleScheduleSection(useGlobalSchedCb);
+    if (!useGlobalSchedCb.checked) {
+      const mode = rSched.mode || 'manual';
+      const modeEl = document.querySelector(`input[name="rule_sched_mode"][value="${mode}"]`);
+      if (modeEl) modeEl.checked = true;
+      document.getElementById('rule-sched-hours').value = rSched.interval_hours || 24;
+      document.getElementById('rule-sched-cron').value = rSched.cron || '0 3 * * *';
+      document.getElementById('rule-sched-dom').value = rSched.day_of_month || 1;
+    }
+  } else {
+    document.getElementById('rule-name').value = '';
+    document.getElementById('rule-content-type').value = 'all';
+    document.getElementById('rule-precondition-tag').value = '';
+    document.getElementById('rule-unmonitor').checked = true;
+    document.getElementById('rule-delete-file').checked = false;
+    document.getElementById('rule-delete-from-emby').checked = false;
+    document.getElementById('rule-require-all-watched').checked = false;
+    document.getElementById('rule-keep-last-by-time').checked = false;
+    document.getElementById('rule-add-tag').value = '';
+    document.getElementById('rule-delay-days').value = 0;
+    document.getElementById('rule-keep-last').value = 0;
+    const allCb = document.getElementById('rule-all-users');
+    allCb.checked = true;
+    toggleRuleAllUsers(allCb);
+    const allServersCb = document.getElementById('rule-all-servers');
+    allServersCb.checked = true;
+    toggleRuleAllServers(allServersCb);
+    const useGlobalSchedCb = document.getElementById('rule-use-global-sched');
+    useGlobalSchedCb.checked = true;
+    toggleRuleScheduleSection(useGlobalSchedCb);
+    document.querySelector('input[name="rule_sched_mode"][value="manual"]').checked = true;
+    document.getElementById('rule-sched-hours').value = 24;
+    document.getElementById('rule-sched-cron').value = '0 3 * * *';
+    document.getElementById('rule-sched-dom').value = 1;
+  }
+
+  document.getElementById('rule-modal-overlay').classList.remove('hidden');
+}
+
+function closeRuleModal(e) {
+  if (e && e.target !== document.getElementById('rule-modal-overlay')) return;
+  document.getElementById('rule-modal-overlay').classList.add('hidden');
+}
+
+function toggleRuleAllUsers(cb) {
+  document.getElementById('rule-users-list').style.opacity = cb.checked ? '0.4' : '1';
+  document.querySelectorAll('.rule-user-cb').forEach(c => { c.disabled = cb.checked; });
+}
+
+function toggleRuleAllServers(cb) {
+  document.getElementById('rule-servers-list').style.opacity = cb.checked ? '0.4' : '1';
+  document.querySelectorAll('.rule-server-cb').forEach(c => { c.disabled = cb.checked; });
+}
+
+function toggleRuleScheduleSection(cb) {
+  document.getElementById('rule-schedule-options').style.display = cb.checked ? 'none' : '';
+}
+
+async function saveRule() {
+  const el = document.getElementById('rule-save-result');
+  el.textContent = 'Saving…'; el.style.color = 'var(--muted)';
+  const allCb = document.getElementById('rule-all-users');
+  const selectedUsers = allCb.checked ? [] :
+    [...document.querySelectorAll('.rule-user-cb:checked')].map(c => c.value);
+  const allServersCb = document.getElementById('rule-all-servers');
+  const selectedServers = allServersCb.checked ? [] :
+    [...document.querySelectorAll('.rule-server-cb:checked')].map(c => c.value);
+  const useGlobalSched = document.getElementById('rule-use-global-sched').checked;
+  const schedModeEl = document.querySelector('input[name="rule_sched_mode"]:checked');
+  const schedMode = schedModeEl ? schedModeEl.value : 'manual';
+  const payload = {
+    name: document.getElementById('rule-name').value.trim() || 'Unnamed Rule',
+    content_type: document.getElementById('rule-content-type').value,
+    precondition_tag: document.getElementById('rule-precondition-tag').value.trim(),
+    all_users: allCb.checked,
+    applies_to_users: selectedUsers,
+    all_servers: allServersCb.checked,
+    applies_to_servers: selectedServers,
+    unmonitor: document.getElementById('rule-unmonitor').checked,
+    delete_file: document.getElementById('rule-delete-file').checked,
+    delete_from_emby: document.getElementById('rule-delete-from-emby').checked,
+    require_all_users_watched: document.getElementById('rule-require-all-watched').checked,
+    keep_last_by_watch_time: document.getElementById('rule-keep-last-by-time').checked,
+    add_tag: document.getElementById('rule-add-tag').value.trim(),
+    delay_days: parseInt(document.getElementById('rule-delay-days').value) || 0,
+    keep_last_episodes: parseInt(document.getElementById('rule-keep-last').value) || 0,
+    schedule: {
+      use_global: useGlobalSched,
+      mode: schedMode,
+      interval_hours: parseInt(document.getElementById('rule-sched-hours').value) || 24,
+      cron: document.getElementById('rule-sched-cron').value.trim() || '0 3 * * *',
+      day_of_month: parseInt(document.getElementById('rule-sched-dom').value) || 1,
+    },
+  };
+  const url = currentEditRuleId ? `/api/rules/${currentEditRuleId}` : '/api/rules';
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (d.ok) { window.location.reload(); }
+    else { el.textContent = '✗ Error saving'; el.style.color = 'var(--danger)'; }
+  } catch(e) {
+    el.textContent = '✗ Request failed'; el.style.color = 'var(--danger)';
+  }
+}
+
+async function toggleRule(ruleId) {
+  await fetch(`/api/rules/${ruleId}/toggle`, {method: 'POST'});
+  window.location.reload();
+}
+
+async function deleteRule(ruleId, name) {
+  if (!confirm(`Remove action "${name}"? This cannot be undone.`)) return;
+  await fetch(`/api/rules/${ruleId}/delete`, {method: 'POST'});
+  window.location.reload();
+}
+</script>
+{% endblock %}

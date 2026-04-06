@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Erasarr{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_sub %}Overview and recent runs{% endblock %}
+{% block topbar_actions %}
+<form method="POST" action="/run" style="display:flex;gap:8px;">
+  <input type="hidden" name="dry_run" value="1">
+  <button type="submit" class="btn btn-ghost btn-sm">⚙ Dry Run</button>
+</form>
+<form method="POST" action="/run">
+  <input type="hidden" name="dry_run" value="0">
+  <button type="submit" class="btn btn-primary btn-sm">▶ Run Now</button>
+</form>
+{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Processed Total</div>
+    <div class="stat-value">{{ state.get('processed', {})|length }}</div>
+    <div class="stat-sub">movies + episodes</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Pending</div>
+    <div class="stat-value">{{ state.get('pending', {})|length }}</div>
+    <div class="stat-sub">awaiting delay / action</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Media Servers</div>
+    <div class="stat-value">{{ cfg.get('media_servers', [])|selectattr('enabled')|list|length }}</div>
+    <div class="stat-sub">active connections</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Next Run</div>
+    <div class="stat-value" style="font-size:18px;margin-top:10px;">
+      {% if scheduled_jobs %}{{ scheduled_jobs[0].next_run.strftime('%H:%M') }}{% else %}Manual{% endif %}
+    </div>
+    <div class="stat-sub">
+      {% if scheduled_jobs %}
+        {{ scheduled_jobs[0].next_run.strftime('%d %b %Y') }}
+        {% if scheduled_jobs | length > 1 %}&nbsp;· {{ scheduled_jobs | length }} jobs{% endif %}
+      {% else %}No schedule set{% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Config Status -->
+<div class="card">
+  <div class="card-title">⬡ Configuration Status</div>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Service</th><th>Address</th><th>Status</th><th>Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for server in cfg.get('media_servers', []) %}
+      <tr>
+        <td>
+          <span class="dot {% if server.enabled %}dot-green{% else %}dot-gray{% endif %}"></span>
+          &nbsp;{{ server.get('name', server.get('type', 'Server')) }}
+        </td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ server.get('address','–') }}</td>
+        <td>
+          {% if server.enabled %}
+          <span class="badge badge-green">enabled</span>
+          {% else %}
+          <span class="badge badge-gray">disabled</span>
+          {% endif %}
+        </td>
+        <td style="font-size:11px;color:var(--muted)">{{ server.get('type','').upper() }}</td>
+      </tr>
+      {% endfor %}
+      {% if cfg.get('radarr', {}).get('enabled') %}
+      <tr>
+        <td><span class="dot dot-green"></span> &nbsp;Radarr</td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ cfg.radarr.get('address','–') }}</td>
+        <td><span class="badge badge-green">enabled</span></td>
+        <td style="font-size:11px;color:var(--muted)">MOVIES</td>
+      </tr>
+      {% endif %}
+      {% for sonarr in cfg.get('sonarr_instances', []) %}
+      <tr>
+        <td>
+          <span class="dot {% if sonarr.enabled %}dot-green{% else %}dot-gray{% endif %}"></span>
+          &nbsp;{{ sonarr.get('name', 'Sonarr') }}
+        </td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ sonarr.get('address','–') }}</td>
+        <td>
+          {% if sonarr.enabled %}<span class="badge badge-green">enabled</span>
+          {% else %}<span class="badge badge-gray">disabled</span>{% endif %}
+        </td>
+        <td style="font-size:11px;color:var(--muted)">TV SHOWS</td>
+      </tr>
+      {% endfor %}
+      {% if not cfg.get('media_servers') and not cfg.get('radarr',{}).get('enabled') and not cfg.get('sonarr_instances') %}
+      <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px;">No services configured yet. <a href="/servers" style="color:var(--accent)">Add a media server →</a></td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Active Actions -->
+<div class="card">
+  <div class="card-title">◎ Active Actions</div>
+  {% if cfg.get('action_rules') %}
+    {% for rule in cfg.action_rules %}
+    <div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;{% if not rule.get('enabled',True) %}opacity:0.5{% endif %}">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+        <span style="font-weight:600;font-size:14px;">{{ rule.name }}</span>
+        {% if not rule.get('enabled', True) %}<span class="badge badge-gray">disabled</span>{% endif %}
+        {% if rule.content_type == 'movies' %}<span class="badge badge-blue">Movies</span>
+        {% elif rule.content_type == 'episodes' %}<span class="badge badge-blue">Episodes</span>
+        {% else %}<span class="badge badge-gray">All content</span>{% endif %}
+        {% set rs = rule.get('schedule',{}) %}
+        {% if not rs.get('use_global', true) %}
+          {% if rs.get('mode') == 'interval' %}<span class="badge badge-blue" style="font-size:10px;">⏰ Every {{ rs.interval_hours }}h</span>
+          {% elif rs.get('mode') == 'daily' %}<span class="badge badge-blue" style="font-size:10px;font-family:var(--mono)">⏰ {{ rs.cron }}</span>
+          {% elif rs.get('mode') == 'monthly' %}<span class="badge badge-blue" style="font-size:10px;">⏰ Day {{ rs.day_of_month }}</span>
+          {% else %}<span class="badge badge-gray" style="font-size:10px;">⏰ Manual</span>{% endif %}
+        {% else %}<span class="badge badge-gray" style="font-size:10px;">⏰ Default schedule</span>{% endif %}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        {% if rule.precondition_tag %}<span class="badge badge-blue" title="Precondition tag">🏷 {{ rule.precondition_tag }}</span>{% endif %}
+        {% set acts = rule.get('actions', {}) %}
+        {% if acts.get('unmonitor') %}<span class="badge badge-warn">Unmonitor</span>{% endif %}
+        {% if acts.get('delete_file') %}<span class="badge badge-red">Delete file</span>{% endif %}
+        {% if acts.get('delete_from_emby') %}<span class="badge badge-red">Delete from server</span>{% endif %}
+        {% if acts.get('require_all_users_watched') %}<span class="badge badge-gray">All users</span>{% endif %}
+        {% if acts.get('keep_last_by_watch_time') %}<span class="badge badge-gray">Keep by watch time</span>{% endif %}
+        {% if acts.get('add_tag') %}<span class="badge badge-blue">Tag: {{ acts.add_tag }}</span>{% endif %}
+        {% if acts.get('delay_days') %}<span class="badge badge-warn">{{ acts.delay_days }}d delay</span>{% endif %}
+        {% if acts.get('keep_last_episodes') %}<span class="badge badge-gray">Keep last {{ acts.keep_last_episodes }}</span>{% endif %}
+        {% if not acts.get('unmonitor') and not acts.get('delete_file') and not acts.get('delete_from_emby') and not acts.get('add_tag') %}
+          <span style="color:var(--muted);font-size:12px;">No actions configured</span>
+        {% endif %}
+        {% if rule.applies_to_servers %}
+          <span style="color:var(--muted);font-size:11px;margin-left:6px;">· {{ rule.applies_to_servers|length }} server(s)</span>
+        {% endif %}
+        {% if rule.applies_to_users %}
+          <span style="color:var(--muted);font-size:11px;">· {{ rule.applies_to_users|length }} user(s)</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div style="color:var(--muted);font-size:13px;padding:16px 0;">No actions configured. <a href="/settings" style="color:var(--accent)">Add an action →</a></div>
+  {% endif %}
+</div>
+
+<!-- Dry-run Preview -->
+{% if preview_by_show or preview_movies %}
+<div class="card" style="border-color:var(--accent);border-width:1px;border-style:solid;">
+  <div class="card-title">🔍 Dry-run Preview <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:8px;">{{ (state.get('dry_run_preview',{})|length) }} item(s) — would be queued on a real run</span></div>
+
+  {% if preview_movies %}
+  <div style="margin-bottom:14px;">
+    <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">Movies</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      {% for movie in preview_movies %}
+      <span class="badge badge-blue" title="{{ movie.rule }}">{{ movie.title }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if preview_by_show %}
+  <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Episodes</div>
+  <table class="table">
+    <thead><tr><th>Show</th><th>Episodes</th><th>Action Rule</th></tr></thead>
+    <tbody>
+      {% for show_name, show_data in preview_by_show|dictsort %}
+      <tr>
+        <td style="font-weight:500;white-space:nowrap">{{ show_name }}</td>
+        <td style="font-size:12px;">
+          {% for season, eps in show_data.seasons|dictsort %}
+          <span style="color:var(--muted);margin-right:4px;">S{{ '%02d'|format(season) }}:</span>
+          <span style="font-family:var(--mono)">{% for ep in eps %}{{ '%02d'|format(ep) }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+          {% if not loop.last %}&nbsp; {% endif %}
+          {% endfor %}
+        </td>
+        <td style="font-size:11px;color:var(--muted);">{{ show_data.rule }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Pending items -->
+{% if pending_by_show or pending_movies %}
+<div class="card">
+  <div class="card-title">⏳ Pending <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:8px;">{{ state.get('pending',{})|length }} item(s) awaiting delay / action</span></div>
+
+  {% if pending_movies %}
+  <div style="margin-bottom:14px;">
+    <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">Movies</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      {% for movie in pending_movies %}
+      <span class="badge badge-blue" title="{{ movie.rule }}">{{ movie.title }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if pending_by_show %}
+  <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Episodes</div>
+  <table class="table">
+    <thead><tr><th>Show</th><th>Pending Episodes</th><th>Action Rule</th></tr></thead>
+    <tbody>
+      {% for show_name, show_data in pending_by_show|dictsort %}
+      <tr>
+        <td style="font-weight:500;white-space:nowrap">{{ show_name }}</td>
+        <td style="font-size:12px;">
+          {% for season, eps in show_data.seasons|dictsort %}
+          <span style="color:var(--muted);margin-right:4px;">S{{ '%02d'|format(season) }}:</span>
+          <span style="font-family:var(--mono)">{% for ep in eps %}{{ '%02d'|format(ep) }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+          {% if not loop.last %}&nbsp; {% endif %}
+          {% endfor %}
+        </td>
+        <td style="font-size:11px;color:var(--muted);">{{ show_data.rule }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Run Log -->
+<div class="card">
+  <div class="section-header">
+    <div class="card-title" style="margin:0">◈ Recent Runs <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:8px;">(last {{ run_log|length }})</span></div>
+    <form method="POST" action="/api/clear-state" onsubmit="return confirm('Clear all processed state? Items will be re-evaluated on next run.')">
+      <button type="submit" class="btn btn-ghost btn-sm">⚠ Clear State</button>
+    </form>
+  </div>
+
+  {% if run_log %}
+    {% for run in run_log %}
+    {% set run_idx = loop.index0 %}
+    <details {% if run_idx == 0 %}open{% endif %} style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;">
+      <summary style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;list-style:none;user-select:none;background:var(--surface2);">
+        <span style="font-size:13px;font-weight:500;font-family:var(--mono)">{{ run.time[:19].replace('T',' ') }}</span>
+        <span style="font-size:11px;color:var(--muted);">{{ run.entries|length }} entries</span>
+        {% set errors = run.entries | selectattr('level','equalto','error') | list %}
+        {% if errors %}
+        <span class="badge badge-red" style="font-size:10px;">{{ errors|length }} error(s)</span>
+        {% endif %}
+        <span style="margin-left:auto;font-size:11px;color:var(--muted);">▾</span>
+      </summary>
+      <div class="log-box" style="border-radius:0;border:none;max-height:400px;overflow-y:auto;">
+        {% for entry in run.entries %}
+        <div class="log-entry">
+          <span class="log-time">{{ entry.time[11:19] }}</span>
+          <span class="log-{{ entry.level }}">{{ entry.msg }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+    {% endfor %}
+  {% else %}
+    <div style="color:var(--muted);text-align:center;padding:32px;">No runs yet. Click <strong>Run Now</strong> to start.</div>
+  {% endif %}
+</div>
+{% endblock %}
