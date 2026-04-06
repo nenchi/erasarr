@@ -14,6 +14,14 @@ from typing import Optional
 logger = logging.getLogger("erasarr")
 
 
+def _safe_int(v) -> Optional[int]:
+    """Convert a value to int, returning None if not possible."""
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
 # ─────────────────────────────────────────────
 #  Media Server Clients
 # ─────────────────────────────────────────────
@@ -78,20 +86,31 @@ class EmbyClient:
 
     def get_watched_items(self, user_id: str, since_days: int = None, since_date: datetime = None):
         """Return list of watched items for a user."""
-        params = {
+        base_params = {
             "userId": user_id,
             "IsPlayed": "true",
             "IncludeItemTypes": "Movie,Episode",
             "Recursive": "true",
             "Fields": "ProviderIds,SeriesInfo,SeriesProviderIds,DateLastSaved",
-            "Limit": 2000,
+            "Limit": 1000,
         }
         if since_date:
-            params["MinDateLastSavedForUser"] = since_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+            base_params["MinDateLastSavedForUser"] = since_date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        data = self._get("/Items", params)
+        raw_items = []
+        start = 0
+        while True:
+            params = {**base_params, "StartIndex": start}
+            data = self._get("/Items", params)
+            page = data.get("Items", [])
+            raw_items.extend(page)
+            total = data.get("TotalRecordCount", 0)
+            start += len(page)
+            if start >= total or not page:
+                break
+
         items = []
-        for item in data.get("Items", []):
+        for item in raw_items:
             watched_at = item.get("UserData", {}).get("LastPlayedDate") or item.get("DateLastSaved")
             item_type = item.get("Type")
             # SeriesProviderIds is the series-level TVDB ID (when Emby exposes it);
@@ -142,20 +161,31 @@ class JellyfinClient(EmbyClient):
             return False, str(e)
 
     def get_watched_items(self, user_id: str, since_days: int = None, since_date: datetime = None):
-        params = {
+        base_params = {
             "userId": user_id,
             "IsPlayed": "true",
             "IncludeItemTypes": "Movie,Episode",
             "Recursive": "true",
             "Fields": "ProviderIds,SeriesProviderIds,DateLastSaved",
-            "Limit": 2000,
+            "Limit": 1000,
         }
         if since_date:
-            params["MinDateLastSavedForUser"] = since_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+            base_params["MinDateLastSavedForUser"] = since_date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        data = self._get(f"/Users/{user_id}/Items", params)
+        raw_items = []
+        start = 0
+        while True:
+            params = {**base_params, "StartIndex": start}
+            data = self._get(f"/Users/{user_id}/Items", params)
+            page = data.get("Items", [])
+            raw_items.extend(page)
+            total = data.get("TotalRecordCount", 0)
+            start += len(page)
+            if start >= total or not page:
+                break
+
         items = []
-        for item in data.get("Items", []):
+        for item in raw_items:
             user_data = item.get("UserData", {})
             watched_at = user_data.get("LastPlayedDate") or item.get("DateLastSaved")
             item_type = item.get("Type")
@@ -402,6 +432,10 @@ class StateTracker:
         self.state["processed"][key] = {**info, "processed_at": datetime.now().isoformat()}
         # Remove from pending if it was there
         self.state["pending"].pop(key, None)
+        self.save()
+
+    def unmark_processed(self, key: str):
+        self.state["processed"].pop(key, None)
         self.save()
 
     def add_pending(self, key: str, info: dict):
@@ -1098,15 +1132,24 @@ class ErasarrMonitor:
                                 s_id = series["id"]
                                 if s_id not in sonarr_ep_protections:
                                     # Protect the last N *watched* episodes for this series only.
+                                    # Normalise to int: Emby/Jellyfin return TVDB IDs as strings,
+                                    # Sonarr returns them as integers.
                                     series_tvdb = series.get("tvdbId")
+                                    try:
+                                        series_tvdb_int = int(series_tvdb)
+                                    except (TypeError, ValueError):
+                                        series_tvdb_int = None
                                     watched_se = sorted(set(
                                         (w["season"], w["episode"])
                                         for w in rule_watched
                                         if w["type"] == "Episode"
                                         and w.get("season") is not None
                                         and w.get("episode") is not None
-                                        and (w.get("series_tvdb_id") == series_tvdb
-                                             or w.get("tvdb_id") == series_tvdb)
+                                        and series_tvdb_int is not None
+                                        and (
+                                            _safe_int(w.get("series_tvdb_id")) == series_tvdb_int
+                                            or _safe_int(w.get("tvdb_id")) == series_tvdb_int
+                                        )
                                     ))
                                     sonarr_ep_protections[s_id] = set(watched_se[-keep_last:])
                                 is_protected = (season, episode_num) in sonarr_ep_protections[s_id]
@@ -1139,10 +1182,15 @@ class ErasarrMonitor:
                                     self._log(f"      ⏸ File kept (keep last {keep_last})")
                                 else:
                                     _ep_size = 0
-                                self.state.mark_processed(key, {
-                                    "title": ep_label, "type": "episode", "rule": rule_name,
-                                    "size_bytes": _ep_size,
-                                })
+                                # Only mark processed if the file was actually deleted or
+                                # no delete action is configured. Protected episodes must
+                                # stay unprocessed so they get re-evaluated each run —
+                                # once a newer episode is watched, protection shifts.
+                                if not (is_protected and rule_actions.get("delete_file")):
+                                    self.state.mark_processed(key, {
+                                        "title": ep_label, "type": "episode", "rule": rule_name,
+                                        "size_bytes": _ep_size,
+                                    })
                             except Exception as _err:
                                 self._log(f"      ✗ Failed to process {ep_label}: {_err}", "error")
 
