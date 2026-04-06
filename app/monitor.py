@@ -893,12 +893,13 @@ class ErasarrMonitor:
                                     else:
                                         s_id = series["id"]
                                         if s_id not in sonarr_ep_protections:
-                                            all_ser_eps = sonarr.get_episodes(s_id)
-                                            ep_nums = sorted(
-                                                (ep["seasonNumber"], ep["episodeNumber"])
-                                                for ep in all_ser_eps if ep["seasonNumber"] > 0
-                                            )
+                                            # Protect the last N *watched* episodes only,
+                                            # not the last N episodes in Sonarr's full list.
+                                            ep_nums = sorted(unique_eps.keys())
                                             sonarr_ep_protections[s_id] = set(ep_nums[-keep_last:])
+                                            # Still fetch all Sonarr episodes for sonarr_ep_sets
+                                            # (used to skip episodes Sonarr doesn't manage).
+                                            all_ser_eps = sonarr.get_episodes(s_id)
                                             sonarr_ep_sets[s_id] = {
                                                 (ep["seasonNumber"], ep["episodeNumber"])
                                                 for ep in all_ser_eps if ep["seasonNumber"] > 0
@@ -1096,16 +1097,18 @@ class ErasarrMonitor:
                             else:
                                 s_id = series["id"]
                                 if s_id not in sonarr_ep_protections:
-                                    all_ser_eps = sonarr.get_episodes(s_id)
-                                    ep_nums = sorted(
-                                        (ep["seasonNumber"], ep["episodeNumber"])
-                                        for ep in all_ser_eps if ep["seasonNumber"] > 0
-                                    )
-                                    sonarr_ep_protections[s_id] = set(ep_nums[-keep_last:])
-                                    sonarr_ep_sets[s_id] = {
-                                        (ep["seasonNumber"], ep["episodeNumber"])
-                                        for ep in all_ser_eps if ep["seasonNumber"] > 0
-                                    }
+                                    # Protect the last N *watched* episodes for this series only.
+                                    series_tvdb = series.get("tvdbId")
+                                    watched_se = sorted(set(
+                                        (w["season"], w["episode"])
+                                        for w in rule_watched
+                                        if w["type"] == "Episode"
+                                        and w.get("season") is not None
+                                        and w.get("episode") is not None
+                                        and (w.get("series_tvdb_id") == series_tvdb
+                                             or w.get("tvdb_id") == series_tvdb)
+                                    ))
+                                    sonarr_ep_protections[s_id] = set(watched_se[-keep_last:])
                                 is_protected = (season, episode_num) in sonarr_ep_protections[s_id]
                         else:
                             is_protected = False
