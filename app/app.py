@@ -48,6 +48,24 @@ def compact_number(n):
         return f"{n/1_000:.1f}K".rstrip("0").rstrip(".")
     return str(n)
 
+@app.template_filter("filesize")
+def filesize_filter(n):
+    """Format bytes as human-readable size: 1.2 GB, 3.4 TB, 1.1 PB, etc."""
+    n = int(n or 0)
+    units = [
+        ("EB", 1_152_921_504_606_846_976),
+        ("PB", 1_125_899_906_842_624),
+        ("TB", 1_099_511_627_776),
+        ("GB", 1_073_741_824),
+        ("MB", 1_048_576),
+        ("KB", 1_024),
+    ]
+    for unit, divisor in units:
+        if n >= divisor:
+            val = n / divisor
+            return f"{val:.1f} {unit}".replace(".0 ", " ")
+    return f"{n} B"
+
 
 # ─────────────────────────────────────────────
 #  Database
@@ -436,6 +454,8 @@ def dashboard():
     cutoff_7d  = now - timedelta(days=7)
     cutoff_30d = now - timedelta(days=30)
     processed_7d = processed_30d = 0
+    freed_bytes_movies = freed_bytes_episodes = freed_bytes_total = 0
+    freed_movies_count = freed_episodes_count = 0
     for item in state.get("processed", {}).values():
         ts = item.get("processed_at", "")
         if not ts:
@@ -448,6 +468,15 @@ def dashboard():
             processed_7d += 1
         if item_dt >= cutoff_30d:
             processed_30d += 1
+        size = item.get("size_bytes", 0) or 0
+        if size > 0:
+            freed_bytes_total += size
+            if item.get("type") == "movie":
+                freed_bytes_movies += size
+                freed_movies_count += 1
+            elif item.get("type") == "episode":
+                freed_bytes_episodes += size
+                freed_episodes_count += 1
     scheduled_jobs = []
     for job in scheduler.get_jobs():
         if job.id.startswith("monitor") and job.next_run_time:
@@ -470,6 +499,11 @@ def dashboard():
         scheduled_jobs=scheduled_jobs,
         processed_7d=processed_7d,
         processed_30d=processed_30d,
+        freed_bytes_total=freed_bytes_total,
+        freed_bytes_movies=freed_bytes_movies,
+        freed_bytes_episodes=freed_bytes_episodes,
+        freed_movies_count=freed_movies_count,
+        freed_episodes_count=freed_episodes_count,
     )
 
 

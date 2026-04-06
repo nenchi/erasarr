@@ -14,7 +14,7 @@
 {% endblock %}
 
 {% block content %}
-<!-- Stats -->
+<!-- Stats row 1 — run stats -->
 <div class="stats-grid">
   <div class="stat-card">
     <div class="stat-label">Processed (last 30 days)</div>
@@ -41,6 +41,46 @@
         {{ scheduled_jobs[0].next_run.strftime('%d %b %Y') }}
         {% if scheduled_jobs | length > 1 %}&nbsp;· {{ scheduled_jobs | length }} jobs{% endif %}
       {% else %}No schedule set{% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Stats row 2 — space freed -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">🎬 Movies — Space Freed</div>
+    <div class="stat-value">{{ freed_bytes_movies | filesize }}</div>
+    <div class="stat-sub">
+      {% if freed_movies_count %}{{ freed_movies_count }} movie{{ 's' if freed_movies_count != 1 }} deleted{% else %}no deletions recorded yet{% endif %}
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">📺 Episodes — Space Freed</div>
+    <div class="stat-value">{{ freed_bytes_episodes | filesize }}</div>
+    <div class="stat-sub">
+      {% if freed_episodes_count %}{{ freed_episodes_count }} episode{{ 's' if freed_episodes_count != 1 }} deleted{% else %}no deletions recorded yet{% endif %}
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">💾 Total Space Freed</div>
+    <div class="stat-value">{{ freed_bytes_total | filesize }}</div>
+    <div class="stat-sub">
+      {% if freed_movies_count or freed_episodes_count %}
+        {{ (freed_movies_count + freed_episodes_count) }} file{{ 's' if (freed_movies_count + freed_episodes_count) != 1 }} deleted
+      {% else %}no deletions recorded yet{% endif %}
+    </div>
+  </div>
+  <div class="stat-card">
+    {% set active_rules = cfg.get('action_rules', []) | selectattr('enabled') | list %}
+    {% set radarr_count = cfg.get('radarr_instances', []) | selectattr('enabled') | list | length %}
+    {% set sonarr_count = cfg.get('sonarr_instances', []) | selectattr('enabled') | list | length %}
+    <div class="stat-label">⚙ Active Rules</div>
+    <div class="stat-value">{{ active_rules | length }}</div>
+    <div class="stat-sub">
+      {%- if radarr_count %}{{ radarr_count }} Radarr{% endif %}
+      {%- if radarr_count and sonarr_count %} · {% endif %}
+      {%- if sonarr_count %}{{ sonarr_count }} Sonarr{% endif %}
+      {%- if not radarr_count and not sonarr_count %}no arr instances{% endif %}
     </div>
   </div>
 </div>
@@ -179,7 +219,7 @@
         {% endif %}
         {% if rule.applies_to_servers %}<span style="color:var(--muted);font-size:11px;">· {{ rule.applies_to_servers|length }} server(s)</span>{% endif %}
         {% if rule.applies_to_users %}<span style="color:var(--muted);font-size:11px;">· {{ rule.applies_to_users|length }} user(s)</span>{% endif %}
-        <a href="/settings" style="margin-left:auto;font-size:11px;color:var(--muted);text-decoration:none;">Edit →</a>
+        <a href="/settings?edit={{ rule.id }}" style="margin-left:auto;font-size:11px;color:var(--accent);text-decoration:none;">Edit →</a>
       </div>
     </details>
     {% endfor %}
@@ -273,8 +313,8 @@
 <div class="card">
   <div class="section-header">
     <div class="card-title" style="margin:0">◈ Recent Runs <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:8px;">(last {{ run_log|length }})</span></div>
-    <form method="POST" action="/api/clear-state" onsubmit="return confirm('Clear all processed state? Items will be re-evaluated on next run.')">
-      <button type="submit" class="btn btn-ghost btn-sm">⚠ Clear State</button>
+    <form method="POST" action="/api/clear-state" onsubmit="return confirm('This will reset all processed history and clear space freed statistics. Items will be re-evaluated on next run. Continue?')">
+      <button type="submit" class="btn btn-ghost btn-sm">⚠ Reset State &amp; Stats</button>
     </form>
   </div>
 

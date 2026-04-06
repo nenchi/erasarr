@@ -688,5 +688,16 @@ async function deleteRule(ruleId, name) {
   await fetch(`/api/rules/${ruleId}/delete`, {method: 'POST'});
   window.location.reload();
 }
+
+// Auto-open edit modal if ?edit=<ruleId> is in the URL (e.g. linked from dashboard)
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const editId = params.get('edit');
+  if (editId) {
+    // Remove the param from the URL bar without reloading
+    history.replaceState(null, '', window.location.pathname);
+    openRuleModal(editId);
+  }
+})();
 </script>
 {% endblock %}

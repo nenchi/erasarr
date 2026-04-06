@@ -326,6 +326,17 @@ class SonarrClient:
         episode["monitored"] = False
         return self._put(f"/episode/{episode['id']}", episode)
 
+    def get_episode_file_size(self, episode: dict) -> int:
+        """Return file size in bytes for an episode, or 0 if unavailable."""
+        file_id = episode.get("episodeFileId", 0)
+        if file_id and file_id > 0:
+            try:
+                data = self._get(f"/episodefile/{file_id}")
+                return data.get("size", 0)
+            except Exception:
+                pass
+        return 0
+
     def delete_episode_file(self, episode: dict):
         if "episodeFileId" in episode and episode["episodeFileId"] > 0:
             return self._delete(f"/episodefile/{episode['episodeFileId']}")
@@ -801,9 +812,12 @@ class ErasarrMonitor:
                                 found_radarr_client.add_tag_to_movie(found_movie, radarr_action_tag_id_r)
                                 self._log(f"      ✓ Tagged: {rule_actions['add_tag']}")
                             if rule_actions.get("delete_file"):
+                                _movie_size = found_movie.get("movieFile", {}).get("size", 0)
                                 found_radarr_client.delete_movie_file(found_movie)
                                 self._log("      ✓ File deleted")
-                            self.state.mark_processed(key, {"title": found_movie["title"], "type": "movie", "rule": rule_name})
+                            else:
+                                _movie_size = 0
+                            self.state.mark_processed(key, {"title": found_movie["title"], "type": "movie", "rule": rule_name, "size_bytes": _movie_size})
                         except Exception as _err:
                             self._log(f"      ✗ Failed: {_err}", "error")
 
@@ -1114,12 +1128,17 @@ class ErasarrMonitor:
                                         tagged_series_this_run.add(_tag_key)
                                         self._log(f"      ✓ Show tagged: {rule_actions['add_tag']}")
                                 if rule_actions.get("delete_file") and not is_protected:
+                                    _ep_size = sonarr.get_episode_file_size(ep_data)
                                     sonarr.delete_episode_file(ep_data)
                                     self._log("      ✓ File deleted")
                                 elif is_protected and rule_actions.get("delete_file"):
+                                    _ep_size = 0
                                     self._log(f"      ⏸ File kept (keep last {keep_last})")
+                                else:
+                                    _ep_size = 0
                                 self.state.mark_processed(key, {
                                     "title": ep_label, "type": "episode", "rule": rule_name,
+                                    "size_bytes": _ep_size,
                                 })
                             except Exception as _err:
                                 self._log(f"      ✗ Failed to process {ep_label}: {_err}", "error")
