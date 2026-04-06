@@ -47,17 +47,17 @@
 {% if cfg.media_servers %}
 <div class="card">
   <div class="card-title">◉ Connected Servers</div>
-  <table class="table">
+  <table class="table table-desktop">
     <thead>
-      <tr><th>Name</th><th>Type</th><th>Address</th><th>Status</th><th></th></tr>
+      <tr><th>Name</th><th>Type</th><th class="col-hide-mobile">Address</th><th>Status</th><th></th></tr>
     </thead>
     <tbody>
       {% for server in cfg.media_servers %}
       <tr id="srow-{{ server.id }}">
         <td style="font-weight:500">{{ server.name }}</td>
         <td><span class="badge badge-blue">{{ server.type.upper() }}</span></td>
-        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ server.address }}</td>
-        <td>
+        <td class="col-hide-mobile" style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ server.address }}</td>
+        <td class="actions">
           <form method="POST" style="display:inline">
             <input type="hidden" name="action" value="toggle_server">
             <input type="hidden" name="server_id" value="{{ server.id }}">
@@ -67,7 +67,7 @@
             </button>
           </form>
         </td>
-        <td>
+        <td class="actions">
           <div style="display:flex;gap:6px">
             <button class="btn btn-ghost btn-sm"
               onclick="openEditServer('{{ server.id }}','{{ server.name|e }}','{{ server.type }}','{{ server.address|e }}','{{ server.api_key|e }}')">Edit</button>
@@ -82,6 +82,32 @@
       {% endfor %}
     </tbody>
   </table>
+  <!-- Mobile card list -->
+  <div class="mobile-list">
+    {% for server in cfg.media_servers %}
+    <div class="mobile-card">
+      <div class="mobile-card-main">
+        <span class="mobile-card-name">{{ server.name }}</span>
+        <span class="badge badge-blue" style="font-size:10px;">{{ server.type.upper() }}</span>
+        <span class="dot {% if server.enabled %}dot-green{% else %}dot-gray{% endif %}"></span>
+      </div>
+      <div class="mobile-card-sub" style="font-family:var(--mono);">{{ server.address }}</div>
+      <div class="mobile-card-actions">
+        <form method="POST" style="display:inline">
+          <input type="hidden" name="action" value="toggle_server">
+          <input type="hidden" name="server_id" value="{{ server.id }}">
+          <button type="submit" class="btn btn-ghost btn-sm">{{ 'Disable' if server.enabled else 'Enable' }}</button>
+        </form>
+        <button class="btn btn-ghost btn-sm" onclick="openEditServer('{{ server.id }}','{{ server.name|e }}','{{ server.type }}','{{ server.address|e }}','{{ server.api_key|e }}')">Edit</button>
+        <form method="POST" onsubmit="return confirm('Remove this server?')" style="display:inline">
+          <input type="hidden" name="action" value="remove_server">
+          <input type="hidden" name="server_id" value="{{ server.id }}">
+          <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
 </div>
 {% endif %}
 

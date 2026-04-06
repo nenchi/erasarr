@@ -9,18 +9,18 @@
   <div class="card-title">◉ Radarr Instances (Movies)</div>
 
   {% if cfg.get('radarr_instances') %}
-  <table class="table" style="margin-bottom:24px;">
-    <thead><tr><th>Name</th><th>Address</th><th>Status</th><th></th></tr></thead>
+  <table class="table table-desktop" style="margin-bottom:24px;">
+    <thead><tr><th>Name</th><th class="col-hide-mobile">Address</th><th>Status</th><th></th></tr></thead>
     <tbody>
       {% for radarr in cfg.radarr_instances %}
       <tr id="rrow-{{ radarr.id }}">
         <td style="font-weight:500">{{ radarr.name }}</td>
-        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ radarr.address }}</td>
+        <td class="col-hide-mobile" style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ radarr.address }}</td>
         <td>
           {% if radarr.enabled %}<span class="badge badge-green">enabled</span>
           {% else %}<span class="badge badge-gray">disabled</span>{% endif %}
         </td>
-        <td>
+        <td class="actions">
           <div style="display:flex;gap:6px">
             <button class="btn btn-ghost btn-sm"
               onclick="openEditRadarr('{{ radarr.id }}','{{ radarr.name|e }}','{{ radarr.address|e }}','{{ radarr.api_key|e }}')">Edit</button>
@@ -36,6 +36,28 @@
       {% endfor %}
     </tbody>
   </table>
+  <!-- Mobile card list -->
+  <div class="mobile-list" style="margin-bottom:16px;">
+    {% for radarr in cfg.radarr_instances %}
+    <div class="mobile-card">
+      <div class="mobile-card-main">
+        <span class="mobile-card-name">{{ radarr.name }}</span>
+        {% if radarr.enabled %}<span class="badge badge-green" style="font-size:10px;">enabled</span>
+        {% else %}<span class="badge badge-gray" style="font-size:10px;">disabled</span>{% endif %}
+      </div>
+      <div class="mobile-card-sub" style="font-family:var(--mono);">{{ radarr.address }}</div>
+      <div class="mobile-card-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openEditRadarr('{{ radarr.id }}','{{ radarr.name|e }}','{{ radarr.address|e }}','{{ radarr.api_key|e }}')">Edit</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleRadarr('{{ radarr.id }}')">{{ 'Disable' if radarr.enabled else 'Enable' }}</button>
+        <form method="POST" onsubmit="return confirm('Remove this Radarr instance?')" style="display:inline">
+          <input type="hidden" name="action" value="remove_radarr">
+          <input type="hidden" name="radarr_id" value="{{ radarr.id }}">
+          <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
   {% endif %}
 
   <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:4px;">
@@ -73,18 +95,18 @@
   <div class="card-title">◈ Sonarr Instances (TV)</div>
 
   {% if cfg.get('sonarr_instances') %}
-  <table class="table" style="margin-bottom:24px;">
-    <thead><tr><th>Name</th><th>Address</th><th>Status</th><th></th></tr></thead>
+  <table class="table table-desktop" style="margin-bottom:24px;">
+    <thead><tr><th>Name</th><th class="col-hide-mobile">Address</th><th>Status</th><th></th></tr></thead>
     <tbody>
       {% for sonarr in cfg.sonarr_instances %}
       <tr id="srow-{{ sonarr.id }}">
         <td style="font-weight:500">{{ sonarr.name }}</td>
-        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ sonarr.address }}</td>
+        <td class="col-hide-mobile" style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ sonarr.address }}</td>
         <td>
           {% if sonarr.enabled %}<span class="badge badge-green">enabled</span>
           {% else %}<span class="badge badge-gray">disabled</span>{% endif %}
         </td>
-        <td>
+        <td class="actions">
           <div style="display:flex;gap:6px">
             <button class="btn btn-ghost btn-sm"
               onclick="openEditSonarr('{{ sonarr.id }}','{{ sonarr.name|e }}','{{ sonarr.address|e }}','{{ sonarr.api_key|e }}')">Edit</button>
@@ -102,6 +124,28 @@
       {% endfor %}
     </tbody>
   </table>
+  <!-- Mobile card list -->
+  <div class="mobile-list" style="margin-bottom:16px;">
+    {% for sonarr in cfg.sonarr_instances %}
+    <div class="mobile-card">
+      <div class="mobile-card-main">
+        <span class="mobile-card-name">{{ sonarr.name }}</span>
+        {% if sonarr.enabled %}<span class="badge badge-green" style="font-size:10px;">enabled</span>
+        {% else %}<span class="badge badge-gray" style="font-size:10px;">disabled</span>{% endif %}
+      </div>
+      <div class="mobile-card-sub" style="font-family:var(--mono);">{{ sonarr.address }}</div>
+      <div class="mobile-card-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openEditSonarr('{{ sonarr.id }}','{{ sonarr.name|e }}','{{ sonarr.address|e }}','{{ sonarr.api_key|e }}')">Edit</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleSonarr('{{ sonarr.id }}')">{{ 'Disable' if sonarr.enabled else 'Enable' }}</button>
+        <form method="POST" onsubmit="return confirm('Remove this Sonarr instance?')" style="display:inline">
+          <input type="hidden" name="action" value="remove_sonarr">
+          <input type="hidden" name="sonarr_id" value="{{ sonarr.id }}">
+          <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
   {% endif %}
 
   <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:4px;">

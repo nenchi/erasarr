@@ -15,34 +15,34 @@
   </p>
 
   {% if cfg.action_rules %}
-  <table class="table">
+  <table class="table table-desktop">
     <thead>
-      <tr><th>Name</th><th>Content</th><th>Users</th><th>Servers</th><th>Actions</th><th>Schedule</th><th>Status</th><th></th></tr>
+      <tr><th>Name</th><th style="white-space:nowrap">Content</th><th class="col-hide-mobile" style="white-space:nowrap">Users</th><th class="col-hide-mobile" style="white-space:nowrap">Servers</th><th>Actions</th><th class="col-hide-mobile" style="white-space:nowrap">Schedule</th><th style="white-space:nowrap">Status</th><th></th></tr>
     </thead>
     <tbody>
       {% for rule in cfg.action_rules %}
       <tr>
         <td style="font-weight:500">{{ rule.name }}</td>
-        <td>
+        <td style="white-space:nowrap">
           {% if rule.content_type == 'movies' %}<span class="badge badge-blue">Movies</span>
           {% elif rule.content_type == 'episodes' %}<span class="badge badge-blue">Episodes</span>
           {% else %}<span class="badge badge-gray">All</span>{% endif %}
         </td>
-        <td>
+        <td class="col-hide-mobile" style="white-space:nowrap">
           {% if not rule.applies_to_users %}
             <span class="badge badge-gray">All Users</span>
           {% else %}
             <span class="badge badge-blue">{{ rule.applies_to_users | length }} selected</span>
           {% endif %}
         </td>
-        <td>
+        <td class="col-hide-mobile" style="white-space:nowrap">
           {% if not rule.applies_to_servers %}
             <span class="badge badge-gray">All</span>
           {% else %}
             <span class="badge badge-blue">{{ rule.applies_to_servers | length }} server(s)</span>
           {% endif %}
         </td>
-        <td style="font-size:12px;color:var(--muted);max-width:220px;">
+        <td style="font-size:12px;color:var(--muted);">
           {% set acts = namespace(list=[]) %}
           {% if rule.actions.unmonitor %}{% set acts.list = acts.list + ['Unmonitor'] %}{% endif %}
           {% if rule.actions.delete_file %}{% set acts.list = acts.list + ['Delete file'] %}{% endif %}
@@ -54,7 +54,7 @@
           {% if rule.actions.keep_last_episodes %}{% set acts.list = acts.list + ['Keep last ' + rule.actions.keep_last_episodes | string + ' eps'] %}{% endif %}
           {{ acts.list | join(', ') or '— no actions —' }}
         </td>
-        <td>
+        <td class="col-hide-mobile" style="white-space:nowrap">
           {% set rs = rule.get('schedule', {}) %}
           {% if rs.get('use_global', true) or not rs %}
             <span class="badge badge-gray">Default</span>
@@ -68,12 +68,12 @@
             <span class="badge badge-gray">Manual</span>
           {% endif %}
         </td>
-        <td>
+        <td style="white-space:nowrap">
           <span class="badge {{ 'badge-green' if rule.get('enabled', True) else 'badge-gray' }}">
             {{ 'enabled' if rule.get('enabled', True) else 'disabled' }}
           </span>
         </td>
-        <td>
+        <td class="actions">
           <div style="display:flex;gap:6px;flex-wrap:nowrap">
             <button class="btn btn-ghost btn-sm" onclick="openRuleModal('{{ rule.id }}')">Edit</button>
             <button class="btn btn-ghost btn-sm" onclick="toggleRule('{{ rule.id }}')">
@@ -86,6 +86,34 @@
       {% endfor %}
     </tbody>
   </table>
+  <!-- Mobile card list -->
+  <div class="mobile-list">
+    {% for rule in cfg.action_rules %}
+    <div class="mobile-card">
+      <div class="mobile-card-main">
+        <span class="mobile-card-name">{{ rule.name }}</span>
+        {% if rule.content_type == 'movies' %}<span class="badge badge-blue" style="font-size:10px;">Movies</span>
+        {% elif rule.content_type == 'episodes' %}<span class="badge badge-blue" style="font-size:10px;">Episodes</span>
+        {% else %}<span class="badge badge-gray" style="font-size:10px;">All</span>{% endif %}
+        <span class="badge {{ 'badge-green' if rule.get('enabled', True) else 'badge-gray' }}" style="font-size:10px;">{{ 'on' if rule.get('enabled', True) else 'off' }}</span>
+      </div>
+      <div class="mobile-card-sub wrap">
+        {% set acts = namespace(list=[]) %}
+        {% if rule.actions.unmonitor %}{% set acts.list = acts.list + ['Unmonitor'] %}{% endif %}
+        {% if rule.actions.delete_file %}{% set acts.list = acts.list + ['Delete file'] %}{% endif %}
+        {% if rule.actions.delete_from_emby %}{% set acts.list = acts.list + ['Delete from server'] %}{% endif %}
+        {% if rule.actions.add_tag %}{% set acts.list = acts.list + ['Tag: ' + rule.actions.add_tag] %}{% endif %}
+        {% if rule.actions.delay_days %}{% set acts.list = acts.list + [rule.actions.delay_days|string + 'd delay'] %}{% endif %}
+        {{ acts.list | join(' · ') or 'No actions configured' }}
+      </div>
+      <div class="mobile-card-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openRuleModal('{{ rule.id }}')">Edit</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleRule('{{ rule.id }}')">{{ 'Disable' if rule.get('enabled', True) else 'Enable' }}</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteRule('{{ rule.id }}', '{{ rule.name | e }}')">Remove</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
   {% else %}
   <div style="text-align:center;padding:40px 20px;color:var(--muted);">
     <div style="font-size:32px;margin-bottom:12px;">⚡</div>

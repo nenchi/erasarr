@@ -51,7 +51,7 @@
   <table class="table">
     <thead>
       <tr>
-        <th>Service</th><th>Address</th><th>Status</th><th>Details</th>
+        <th>Service</th><th class="col-hide-mobile">Address</th><th>Status</th><th class="col-hide-mobile">Details</th>
       </tr>
     </thead>
     <tbody>
@@ -61,7 +61,7 @@
           <span class="dot {% if server.enabled %}dot-green{% else %}dot-gray{% endif %}"></span>
           &nbsp;{{ server.get('name', server.get('type', 'Server')) }}
         </td>
-        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ server.get('address','–') }}</td>
+        <td class="col-hide-mobile" style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ server.get('address','–') }}</td>
         <td>
           {% if server.enabled %}
           <span class="badge badge-green">enabled</span>
@@ -69,15 +69,15 @@
           <span class="badge badge-gray">disabled</span>
           {% endif %}
         </td>
-        <td style="font-size:11px;color:var(--muted)">{{ server.get('type','').upper() }}</td>
+        <td class="col-hide-mobile" style="font-size:11px;color:var(--muted)">{{ server.get('type','').upper() }}</td>
       </tr>
       {% endfor %}
       {% if cfg.get('radarr', {}).get('enabled') %}
       <tr>
         <td><span class="dot dot-green"></span> &nbsp;Radarr</td>
-        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ cfg.radarr.get('address','–') }}</td>
+        <td class="col-hide-mobile" style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ cfg.radarr.get('address','–') }}</td>
         <td><span class="badge badge-green">enabled</span></td>
-        <td style="font-size:11px;color:var(--muted)">MOVIES</td>
+        <td class="col-hide-mobile" style="font-size:11px;color:var(--muted)">MOVIES</td>
       </tr>
       {% endif %}
       {% for sonarr in cfg.get('sonarr_instances', []) %}
@@ -86,12 +86,12 @@
           <span class="dot {% if sonarr.enabled %}dot-green{% else %}dot-gray{% endif %}"></span>
           &nbsp;{{ sonarr.get('name', 'Sonarr') }}
         </td>
-        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ sonarr.get('address','–') }}</td>
+        <td class="col-hide-mobile" style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ sonarr.get('address','–') }}</td>
         <td>
           {% if sonarr.enabled %}<span class="badge badge-green">enabled</span>
           {% else %}<span class="badge badge-gray">disabled</span>{% endif %}
         </td>
-        <td style="font-size:11px;color:var(--muted)">TV SHOWS</td>
+        <td class="col-hide-mobile" style="font-size:11px;color:var(--muted)">TV SHOWS</td>
       </tr>
       {% endfor %}
       {% if not cfg.get('media_servers') and not cfg.get('radarr',{}).get('enabled') and not cfg.get('sonarr_instances') %}
@@ -101,29 +101,71 @@
   </table>
 </div>
 
-<!-- Active Actions -->
+<!-- Action Rules accordion -->
 <div class="card">
-  <div class="card-title">◎ Active Actions</div>
+  <div class="card-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <span>◎ Action Rules</span>
+    <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
+      {% if cfg.get('action_rules') %}
+        {% set enabled_count = cfg.action_rules | rejectattr('enabled', 'equalto', False) | list | length %}
+        <span style="font-size:12px;font-weight:400;color:var(--muted);">{{ enabled_count }} active · {{ cfg.action_rules|length }} total</span>
+      {% endif %}
+      <a href="/settings" class="btn btn-ghost btn-sm" style="font-size:11px;">Manage →</a>
+    </div>
+  </div>
+
+  {% if scheduled_jobs %}
+  <div style="background:rgba(79,156,249,.07);border:1px solid rgba(79,156,249,.2);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span style="font-size:12px;color:var(--accent);flex-shrink:0;">⏰ Next run:</span>
+    <span style="font-size:13px;font-weight:500;">{{ scheduled_jobs[0].label }}</span>
+    <span style="font-size:12px;color:var(--muted);font-family:var(--mono);">{{ scheduled_jobs[0].next_run.strftime('%a %d %b · %H:%M') }}</span>
+    {% if scheduled_jobs|length > 1 %}
+    <span style="font-size:11px;color:var(--muted);margin-left:auto;">+{{ scheduled_jobs|length - 1 }} more scheduled</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if cfg.get('action_rules') %}
+  <div style="display:flex;flex-direction:column;gap:5px;">
     {% for rule in cfg.action_rules %}
-    <div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;{% if not rule.get('enabled',True) %}opacity:0.5{% endif %}">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-        <span style="font-weight:600;font-size:14px;">{{ rule.name }}</span>
-        {% if not rule.get('enabled', True) %}<span class="badge badge-gray">disabled</span>{% endif %}
-        {% if rule.content_type == 'movies' %}<span class="badge badge-blue">Movies</span>
-        {% elif rule.content_type == 'episodes' %}<span class="badge badge-blue">Episodes</span>
-        {% else %}<span class="badge badge-gray">All content</span>{% endif %}
-        {% set rs = rule.get('schedule',{}) %}
+    {% set is_enabled = rule.get('enabled', True) %}
+    {% set acts = rule.get('actions', {}) %}
+    {% set rs = rule.get('schedule', {}) %}
+    {% set rule_next = namespace(time=None) %}
+    {% for job in scheduled_jobs %}
+      {% if rule_next.time is none %}
+        {% if job.label == rule.name %}{% set rule_next.time = job.next_run %}
+        {% elif job.label == 'All actions (default schedule)' and rs.get('use_global', true) %}{% set rule_next.time = job.next_run %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+
+    <details style="border:1px solid var(--border);border-radius:8px;overflow:hidden;{% if not is_enabled %}opacity:0.55{% endif %}">
+      <summary style="list-style:none;padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;user-select:none;background:var(--surface2);">
+        <span class="dot {% if is_enabled %}dot-green{% else %}dot-gray{% endif %}" style="flex-shrink:0;"></span>
+        <span style="font-weight:600;font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ rule.name }}">{{ rule.name }}</span>
+        <span style="display:flex;gap:5px;align-items:center;flex-shrink:0;">
+          {% if rule.content_type == 'movies' %}<span class="badge badge-blue" style="font-size:10px;">Movies</span>
+          {% elif rule.content_type == 'episodes' %}<span class="badge badge-blue" style="font-size:10px;">Episodes</span>
+          {% else %}<span class="badge badge-gray" style="font-size:10px;">All</span>{% endif %}
+          {% if not is_enabled %}
+            <span class="badge badge-gray" style="font-size:10px;">off</span>
+          {% elif rule_next.time %}
+            <span class="col-hide-mobile" style="font-size:10px;color:var(--muted);font-family:var(--mono);">{{ rule_next.time.strftime('%d %b %H:%M') }}</span>
+          {% else %}
+            <span class="col-hide-mobile badge badge-gray" style="font-size:10px;">manual</span>
+          {% endif %}
+        </span>
+        <span style="font-size:11px;color:var(--muted);flex-shrink:0;">▾</span>
+      </summary>
+      <div style="padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
         {% if not rs.get('use_global', true) %}
           {% if rs.get('mode') == 'interval' %}<span class="badge badge-blue" style="font-size:10px;">⏰ Every {{ rs.interval_hours }}h</span>
           {% elif rs.get('mode') == 'daily' %}<span class="badge badge-blue" style="font-size:10px;font-family:var(--mono)">⏰ {{ rs.cron }}</span>
           {% elif rs.get('mode') == 'monthly' %}<span class="badge badge-blue" style="font-size:10px;">⏰ Day {{ rs.day_of_month }}</span>
           {% else %}<span class="badge badge-gray" style="font-size:10px;">⏰ Manual</span>{% endif %}
         {% else %}<span class="badge badge-gray" style="font-size:10px;">⏰ Default schedule</span>{% endif %}
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        {% if rule.precondition_tag %}<span class="badge badge-blue" title="Precondition tag">🏷 {{ rule.precondition_tag }}</span>{% endif %}
-        {% set acts = rule.get('actions', {}) %}
+        {% if rule.precondition_tag %}<span class="badge badge-blue" style="font-size:10px;" title="Precondition tag">🏷 {{ rule.precondition_tag }}</span>{% endif %}
         {% if acts.get('unmonitor') %}<span class="badge badge-warn">Unmonitor</span>{% endif %}
         {% if acts.get('delete_file') %}<span class="badge badge-red">Delete file</span>{% endif %}
         {% if acts.get('delete_from_emby') %}<span class="badge badge-red">Delete from server</span>{% endif %}
@@ -135,15 +177,13 @@
         {% if not acts.get('unmonitor') and not acts.get('delete_file') and not acts.get('delete_from_emby') and not acts.get('add_tag') %}
           <span style="color:var(--muted);font-size:12px;">No actions configured</span>
         {% endif %}
-        {% if rule.applies_to_servers %}
-          <span style="color:var(--muted);font-size:11px;margin-left:6px;">· {{ rule.applies_to_servers|length }} server(s)</span>
-        {% endif %}
-        {% if rule.applies_to_users %}
-          <span style="color:var(--muted);font-size:11px;">· {{ rule.applies_to_users|length }} user(s)</span>
-        {% endif %}
+        {% if rule.applies_to_servers %}<span style="color:var(--muted);font-size:11px;">· {{ rule.applies_to_servers|length }} server(s)</span>{% endif %}
+        {% if rule.applies_to_users %}<span style="color:var(--muted);font-size:11px;">· {{ rule.applies_to_users|length }} user(s)</span>{% endif %}
+        <a href="/settings" style="margin-left:auto;font-size:11px;color:var(--muted);text-decoration:none;">Edit →</a>
       </div>
-    </div>
+    </details>
     {% endfor %}
+  </div>
   {% else %}
     <div style="color:var(--muted);font-size:13px;padding:16px 0;">No actions configured. <a href="/settings" style="color:var(--accent)">Add an action →</a></div>
   {% endif %}

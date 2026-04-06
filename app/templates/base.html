@@ -43,7 +43,7 @@ html[data-theme="light"] .table tr:hover td { background: rgba(0,0,0,.03); }
 html[data-theme="light"] .form-input, html[data-theme="light"] .form-select { color: var(--text); }
 html[data-theme="light"] .log-info { color: var(--text); }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: hidden; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -51,6 +51,7 @@ body {
   font-size: 14px;
   min-height: 100vh;
   display: flex;
+  overflow-x: hidden;
 }
 
 /* Sidebar */
@@ -64,6 +65,7 @@ body {
   flex-shrink: 0;
   position: fixed;
   top: 0; left: 0; bottom: 0;
+  transition: transform .25s;
 }
 .sidebar-logo {
   padding: 24px 20px 20px;
@@ -122,8 +124,11 @@ body {
   margin-left: 220px;
   flex: 1;
   min-height: 100vh;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  transition: margin-left .25s;
 }
 .topbar {
   padding: 20px 32px;
@@ -135,7 +140,7 @@ body {
 }
 .page-title { font-size: 20px; font-weight: 600; }
 .page-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.content { padding: 32px; flex: 1; max-width: 1100px; }
+.content { padding: 32px; flex: 1; max-width: 1100px; width: 100%; min-width: 0; word-break: break-word; }
 
 /* Cards */
 .card {
@@ -169,6 +174,7 @@ body {
 }
 .form-input, .form-select {
   width: 100%;
+  max-width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -402,11 +408,23 @@ details[open] > summary > span:last-child { transform: rotate(180deg); display: 
 }
 .modal-close:hover { color: var(--text); }
 
-/* Responsive */
+/* Responsive — tablet */
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .form-row, .form-row-3 { grid-template-columns: 1fr; }
 }
+/* Prevent action button cells from wrapping — table overflow-x:auto handles the rest */
+.table .actions { white-space: nowrap; }
+.table .actions > div { flex-wrap: nowrap !important; }
+/* Mobile card list — replaces tables on small screens */
+.mobile-list { display: none; }
+.mobile-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.mobile-card + .mobile-card { margin-top: 6px; }
+.mobile-card-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+.mobile-card-name { font-weight: 600; font-size: 13px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-card-sub { font-size: 11px; color: var(--muted); margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mobile-card-sub.wrap { white-space: normal; }
+.mobile-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 /* Theme toggle button */
 .theme-btn {
   background: none;
@@ -420,6 +438,86 @@ details[open] > summary > span:last-child { transform: rotate(180deg); display: 
   transition: all .15s;
 }
 .theme-btn:hover { border-color: var(--muted); color: var(--text); }
+/* Sidebar toggle / hamburger */
+.sidebar-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 10px;
+  line-height: 1;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.sidebar-toggle:hover { border-color: var(--muted); color: var(--text); }
+/* Desktop collapsed state */
+.sidebar.collapsed { transform: translateX(-220px); }
+.main.sidebar-collapsed { margin-left: 0; }
+/* Backdrop for mobile overlay */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 99;
+}
+.sidebar-backdrop.visible { display: block; }
+/* Mobile layout */
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-220px); z-index: 100; }
+  .sidebar.open { transform: translateX(0); }
+  .main { margin-left: 0 !important; }
+
+  /* Topbar: wrap actions below title on small screens */
+  .topbar {
+    padding: 14px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .page-title { font-size: 17px; }
+
+  /* Content */
+  .content { padding: 18px 14px; }
+
+  /* Cards */
+  .card { padding: 16px; margin-bottom: 14px; }
+
+  /* Tables: scroll horizontally inside the card instead of breaking the page layout */
+  .table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-desktop { display: none !important; }
+  .mobile-list { display: block; }
+
+  /* Stats */
+  .stats-grid { gap: 10px; margin-bottom: 16px; }
+  .stat-card { padding: 14px; }
+  .stat-value { font-size: 22px !important; }
+
+  /* Buttons */
+  .btn-group { gap: 8px; }
+  .section-header { flex-wrap: wrap; gap: 8px; }
+
+  /* Modal */
+  .modal { padding: 20px 16px; }
+
+  /* Column visibility helpers */
+  .col-hide-mobile { display: none !important; }
+
+  /* Topbar right-side actions: allow wrapping on small screens */
+  .topbar-actions { flex-wrap: wrap; }
+}
+
+/* Very small phones (≤ 480px) */
+@media (max-width: 480px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-card { padding: 12px; }
+  .topbar { padding: 12px 14px; }
+  .content { padding: 14px 12px; }
+  .card { padding: 14px; }
+  body { font-size: 13px; }
+  .col-hide-sm { display: none !important; }
+}
 </style>
 {% block extra_head %}{% endblock %}
 <script>(function(){
@@ -429,6 +527,7 @@ details[open] > summary > span:last-child { transform: rotate(180deg); display: 
 </head>
 <body>
 {% if session.logged_in %}
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 <aside class="sidebar">
   <div class="sidebar-logo">
     <div class="wordmark">Erasarr</div>
@@ -453,27 +552,32 @@ details[open] > summary > span:last-child { transform: rotate(180deg); display: 
     <a href="{{ url_for('change_password') }}" class="nav-item {% if request.endpoint == 'change_password' %}active{% endif %}">
       <span class="nav-icon">◌</span> Change Password
     </a>
+    <div class="nav-label">Backup</div>
+    <a href="/api/export-config" class="nav-item" title="Download config as JSON">
+      <span class="nav-icon">⬇</span> Export Config
+    </a>
+    <a href="#" class="nav-item" onclick="document.getElementById('import-file').click();return false;" title="Restore config from JSON">
+      <span class="nav-icon">⬆</span> Import Config
+    </a>
+    <input type="file" id="import-file" accept=".json,application/json" style="display:none" onchange="importConfig(this)">
   </nav>
   <div class="sidebar-footer">
     Logged in as <strong>{{ session.username }}</strong><br>
     <a href="{{ url_for('logout') }}">Logout →</a>
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-      <a href="/api/export-config" style="color:var(--muted);text-decoration:none;font-size:11px;" title="Download config as JSON">⬇ Export config</a>
-      <span style="color:var(--border)">|</span>
-      <a href="#" onclick="document.getElementById('import-file').click();return false;" style="color:var(--muted);text-decoration:none;font-size:11px;" title="Restore config from JSON">⬆ Import config</a>
-      <input type="file" id="import-file" accept=".json,application/json" style="display:none" onchange="importConfig(this)">
-    </div>
   </div>
 </aside>
 {% endif %}
 <div class="main">
   {% if session.logged_in %}
   <div class="topbar">
-    <div>
-      <div class="page-title">{% block page_title %}{% endblock %}</div>
-      <div class="page-sub">{% block page_sub %}{% endblock %}</div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle navigation">☰</button>
+      <div>
+        <div class="page-title">{% block page_title %}{% endblock %}</div>
+        <div class="page-sub">{% block page_sub %}{% endblock %}</div>
+      </div>
     </div>
-    <div style="display:flex;gap:10px;align-items:center;">
+    <div class="topbar-actions" style="display:flex;gap:10px;align-items:center;">
       {% block topbar_actions %}{% endblock %}
       <button class="theme-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle light/dark mode">☀️</button>
     </div>
@@ -494,10 +598,62 @@ function toggleTheme() {
   localStorage.setItem('erasarr-theme', next);
   document.getElementById('theme-btn').textContent = next === 'dark' ? '☀️' : '🌙';
 }
+function toggleSidebar() {
+  var sidebar = document.querySelector('.sidebar');
+  var main = document.querySelector('.main');
+  if (!sidebar) return;
+  if (window.innerWidth <= 768) {
+    sidebar.classList.toggle('open');
+    document.getElementById('sidebar-backdrop').classList.toggle('visible');
+  } else {
+    var collapsed = sidebar.classList.toggle('collapsed');
+    main.classList.toggle('sidebar-collapsed', collapsed);
+    localStorage.setItem('erasarr-sidebar-collapsed', collapsed ? 'true' : 'false');
+  }
+}
+function closeSidebar() {
+  var sidebar = document.querySelector('.sidebar');
+  if (sidebar) sidebar.classList.remove('open');
+  var backdrop = document.getElementById('sidebar-backdrop');
+  if (backdrop) backdrop.classList.remove('visible');
+}
 document.addEventListener('DOMContentLoaded', function() {
   var t = document.documentElement.getAttribute('data-theme') || 'dark';
   var btn = document.getElementById('theme-btn');
   if (btn) btn.textContent = t === 'dark' ? '☀️' : '🌙';
+  if (window.innerWidth > 768) {
+    var sidebar = document.querySelector('.sidebar');
+    var main = document.querySelector('.main');
+    if (sidebar && main && localStorage.getItem('erasarr-sidebar-collapsed') === 'true') {
+      sidebar.classList.add('collapsed');
+      main.classList.add('sidebar-collapsed');
+    }
+  }
+  document.querySelectorAll('.sidebar .nav-item').forEach(function(link) {
+    link.addEventListener('click', function() {
+      if (window.innerWidth <= 768) closeSidebar();
+    });
+  });
+});
+window.addEventListener('resize', function() {
+  var sidebar = document.querySelector('.sidebar');
+  var backdrop = document.getElementById('sidebar-backdrop');
+  var main = document.querySelector('.main');
+  if (!sidebar) return;
+  if (window.innerWidth > 768) {
+    sidebar.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('visible');
+    if (localStorage.getItem('erasarr-sidebar-collapsed') === 'true') {
+      sidebar.classList.add('collapsed');
+      if (main) main.classList.add('sidebar-collapsed');
+    } else {
+      sidebar.classList.remove('collapsed');
+      if (main) main.classList.remove('sidebar-collapsed');
+    }
+  } else {
+    sidebar.classList.remove('collapsed');
+    if (main) main.classList.remove('sidebar-collapsed');
+  }
 });
 function importConfig(input) {
   var file = input.files[0];
