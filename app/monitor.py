@@ -990,13 +990,20 @@ class ErasarrMonitor:
                                         _e_i = _ep_impl["episodeNumber"]
                                         if _s_i == 0:
                                             continue
-                                        # Skip seasons where any RULE-SCOPED user has no recorded watch.
-                                        # required_user_keys covers all users the rule targets — if any
-                                        # of them has zero watches in this season, skip the season.
-                                        _s_users_dry = _user_season_maxes_dry.get(_s_i, {})
-                                        if not required_user_keys.issubset(set(_s_users_dry.keys())):
+                                        # Per-user effective watermark for this season:
+                                        #  - Direct watch in season _s_i  → their max episode in that season
+                                        #  - Watch in any season > _s_i   → 9999 (clearly progressed past it)
+                                        #  - No evidence in or past season → None (skip season)
+                                        _user_effs_dry = {}
+                                        for _uk_r in required_user_keys:
+                                            if _uk_r in _user_season_maxes_dry.get(_s_i, {}):
+                                                _user_effs_dry[_uk_r] = _user_season_maxes_dry[_s_i][_uk_r]
+                                            elif any(_s > _s_i and _uk_r in _user_season_maxes_dry.get(_s, {})
+                                                     for _s in _user_season_maxes_dry):
+                                                _user_effs_dry[_uk_r] = 9999
+                                        if len(_user_effs_dry) < len(required_user_keys):
                                             continue
-                                        _season_wm_dry = min(_s_users_dry.values())
+                                        _season_wm_dry = min(_user_effs_dry.values())
                                         if _e_i >= _season_wm_dry:
                                             continue
                                         if (_s_i, _e_i) in _watched_se_g:
@@ -1303,12 +1310,20 @@ class ErasarrMonitor:
                             _e = _ep_data["episodeNumber"]
                             if _s == 0:
                                 continue
-                            # Only process seasons where ALL rule-scoped users have a recorded watch
-                            _season_users = _user_season_maxes.get(_s, {})
-                            if not required_user_keys.issubset(set(_season_users.keys())):
+                            # Per-user effective watermark for this season:
+                            #  - Direct watch in season _s   → their max episode in that season
+                            #  - Watch in any season > _s    → 9999 (clearly progressed past it)
+                            #  - No evidence in or past _s   → None (skip this season)
+                            _user_effs: dict = {}
+                            for _uk_r in required_user_keys:
+                                if _uk_r in _user_season_maxes.get(_s, {}):
+                                    _user_effs[_uk_r] = _user_season_maxes[_s][_uk_r]
+                                elif any(_sx > _s and _uk_r in _user_season_maxes.get(_sx, {})
+                                         for _sx in _user_season_maxes):
+                                    _user_effs[_uk_r] = 9999
+                            if len(_user_effs) < len(required_user_keys):
                                 continue
-                            # Per-season watermark = min of each user's max episode in this season
-                            _season_wm = min(_season_users.values())
+                            _season_wm = min(_user_effs.values())
                             if _e >= _season_wm:
                                 continue
                             if (_s, _e) in _watched_se:
