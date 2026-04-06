@@ -583,15 +583,15 @@ class ErasarrMonitor:
         # Collect ALL watched items from every user on every server
         all_watched = []
         all_user_keys: set = set()  # every user key we fetched (for require_all_users logic)
-        since = self.state.get_last_run()
-        if since:
-            since = min(since, datetime.now() - timedelta(days=7))
+        # Always fetch full watch history — no date filter.
+        # The is_processed() check makes re-fetching old items harmless, and a date-
+        # capped window would break keep-last protection for episodes watched long ago.
         for client in media_clients:
             try:
                 users = client.get_users()
                 for user in users:
                     self._log(f"Fetching watch history for {user['name']} on {client.name}")
-                    items = client.get_watched_items(user["id"], since_date=since)
+                    items = client.get_watched_items(user["id"])
                     self._log(f"  Found {len(items)} watched items")
                     user_key = f"{client.server_id}:{user['id']}"
                     all_user_keys.add(user_key)
@@ -1139,16 +1139,23 @@ class ErasarrMonitor:
                                         series_tvdb_int = int(series_tvdb)
                                     except (TypeError, ValueError):
                                         series_tvdb_int = None
+                                    show_name_lower = series["title"].strip().lower()
                                     watched_se = sorted(set(
                                         (w["season"], w["episode"])
                                         for w in rule_watched
                                         if w["type"] == "Episode"
                                         and w.get("season") is not None
                                         and w.get("episode") is not None
-                                        and series_tvdb_int is not None
                                         and (
-                                            _safe_int(w.get("series_tvdb_id")) == series_tvdb_int
-                                            or _safe_int(w.get("tvdb_id")) == series_tvdb_int
+                                            # Primary: match by series TVDB ID
+                                            (series_tvdb_int is not None and (
+                                                _safe_int(w.get("series_tvdb_id")) == series_tvdb_int
+                                                or _safe_int(w.get("tvdb_id")) == series_tvdb_int
+                                            ))
+                                            # Fallback: match by series name when TVDB IDs are
+                                            # missing or episode-level (Emby doesn't always
+                                            # populate SeriesProviderIds.Tvdb)
+                                            or (w.get("series_name") or "").strip().lower() == show_name_lower
                                         )
                                     ))
                                     sonarr_ep_protections[s_id] = set(watched_se[-keep_last:])

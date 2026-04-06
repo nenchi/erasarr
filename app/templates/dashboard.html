@@ -3,14 +3,65 @@
 {% block page_title %}Dashboard{% endblock %}
 {% block page_sub %}Overview and recent runs{% endblock %}
 {% block topbar_actions %}
-<form method="POST" action="/run" style="display:flex;gap:8px;">
+<form method="POST" action="/run" style="display:flex;gap:8px;" onsubmit="showRunOverlay('dry')">
   <input type="hidden" name="dry_run" value="1">
   <button type="submit" class="btn btn-ghost btn-sm">⚙ Dry Run</button>
 </form>
-<form method="POST" action="/run">
+<form method="POST" action="/run" onsubmit="showRunOverlay('real')">
   <input type="hidden" name="dry_run" value="0">
   <button type="submit" class="btn btn-primary btn-sm">▶ Run Now</button>
 </form>
+
+<!-- Run overlay -->
+<div id="run-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.65);backdrop-filter:blur(3px);align-items:center;justify-content:center;flex-direction:column;gap:20px;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:36px 48px;text-align:center;max-width:420px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
+    <div id="run-overlay-spinner" style="margin:0 auto 20px;width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+    <div id="run-overlay-title" style="font-size:16px;font-weight:600;margin-bottom:8px;color:var(--fg)"></div>
+    <div id="run-overlay-msg" style="font-size:13px;color:var(--muted);line-height:1.5;min-height:40px;"></div>
+  </div>
+</div>
+
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+<script>
+const _dryPhrases = [
+  "Fetching watch history…",
+  "Querying Sonarr for series…",
+  "Querying Radarr for movies…",
+  "Computing keep-last protection sets…",
+  "Classifying episodes…",
+  "Building dry-run preview…",
+  "Almost done…",
+];
+const _realPhrases = [
+  "Fetching watch history…",
+  "Querying Sonarr for series…",
+  "Querying Radarr for movies…",
+  "Computing keep-last protection sets…",
+  "Processing episodes…",
+  "Processing movies…",
+  "Cleaning up…",
+  "Finishing up…",
+];
+
+function showRunOverlay(mode) {
+  const overlay = document.getElementById('run-overlay');
+  const title   = document.getElementById('run-overlay-title');
+  const msg     = document.getElementById('run-overlay-msg');
+  overlay.style.display = 'flex';
+  title.textContent = mode === 'dry' ? '⚙ Running Dry Run…' : '▶ Running Now…';
+  const phrases = mode === 'dry' ? _dryPhrases : _realPhrases;
+  let i = 0;
+  msg.textContent = phrases[0];
+  const iv = setInterval(() => {
+    i = Math.min(i + 1, phrases.length - 1);
+    msg.textContent = phrases[i];
+    if (i === phrases.length - 1) clearInterval(iv);
+  }, 2800);
+}
+</script>
 {% endblock %}
 
 {% block content %}
@@ -313,8 +364,11 @@
 <div class="card">
   <div class="section-header">
     <div class="card-title" style="margin:0">◈ Recent Runs <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:8px;">(last {{ run_log|length }})</span></div>
-    <form method="POST" action="/api/clear-state" onsubmit="return confirm('This will reset all processed history and clear space freed statistics. Items will be re-evaluated on next run. Continue?')">
-      <button type="submit" class="btn btn-ghost btn-sm">⚠ Reset State &amp; Stats</button>
+    <form method="POST" action="/api/clear-state" onsubmit="return confirm('This will wipe ALL data including deletion history and space freed statistics. Continue?')">
+      <button type="submit" class="btn btn-ghost btn-sm">⚠ Full Reset</button>
+    </form>
+    <form method="POST" action="/api/clear-processed" onsubmit="return confirm('This will clear pending and kept-on-disk entries so episodes are re-evaluated. Deletion history and space freed stats are preserved. Continue?')">
+      <button type="submit" class="btn btn-ghost btn-sm">↺ Clear History</button>
     </form>
   </div>
 

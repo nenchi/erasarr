@@ -20,7 +20,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from monitor import ErasarrMonitor, EmbyClient, JellyfinClient, RadarrClient, SonarrClient
+from monitor import ErasarrMonitor, EmbyClient, JellyfinClient, RadarrClient, SonarrClient, StateTracker
 
 # ─────────────────────────────────────────────
 #  App Setup
@@ -960,6 +960,22 @@ def api_clear_state():
     if os.path.exists(STATE_FILE):
         os.remove(STATE_FILE)
     flash("State cleared", "success")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/api/clear-processed", methods=["POST"])
+@login_required
+def api_clear_processed():
+    """Clear only non-deletion processed entries (kept-on-disk), preserving real deletions and stats."""
+    state = StateTracker(STATE_FILE)
+    state.state["processed"] = {
+        k: v for k, v in state.state.get("processed", {}).items()
+        if (v.get("size_bytes") or 0) > 0
+    }
+    state.state["pending"] = {}
+    state.state["dry_run_preview"] = {}
+    state.save()
+    flash("History cleared (deletions and stats preserved)", "success")
     return redirect(url_for("dashboard"))
 
 
