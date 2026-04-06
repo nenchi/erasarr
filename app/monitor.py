@@ -646,6 +646,10 @@ class ErasarrMonitor:
             keep_last_by_time = bool(rule_actions.get("keep_last_by_watch_time", False))
             delete_from_emby = bool(rule_actions.get("delete_from_emby", False))
             require_all_watched = bool(rule_actions.get("require_all_users_watched", False))
+            # force_delete_older works well alongside require_all_watched:
+            # explicit episodes are gated by all-users-watched; implicit older episodes
+            # are gated by the per-season required_user_keys check.
+            force_delete_older = bool(rule_actions.get("force_delete_older_if_newer_watched", False))
             # Users that must have watched an episode before it can be processed.
             # If the rule applies to specific users, use those; otherwise use everyone.
             required_user_keys = applies_to_users if applies_to_users else all_user_keys
@@ -701,6 +705,8 @@ class ErasarrMonitor:
             # Cache: series_id -> full set of (season, episode) known to Sonarr
             # Used in dry-run to skip episodes Sonarr doesn't manage (find_episode returns None)
             sonarr_ep_sets: dict = {}
+            # Cache: series_id -> full list of episode dicts (for implicit older-episode pass)
+            sonarr_ep_full_cache: dict = {}
             # For watch-time mode: name_key -> set of (season, episode) to protect
             series_protected_by_time: dict = {}
             if keep_last > 0 and keep_last_by_time:
@@ -938,6 +944,7 @@ class ErasarrMonitor:
                                                 (ep["seasonNumber"], ep["episodeNumber"])
                                                 for ep in all_ser_eps if ep["seasonNumber"] > 0
                                             }
+                                            sonarr_ep_full_cache[s_id] = all_ser_eps
                                         this_protected = sonarr_ep_protections[s_id]
                                 else:
                                     this_protected = set()
@@ -952,7 +959,56 @@ class ErasarrMonitor:
                                         (ep["seasonNumber"], ep["episodeNumber"])
                                         for ep in _all_eps if ep["seasonNumber"] > 0
                                     }
+                                    sonarr_ep_full_cache[dry_s_id] = _all_eps
                                 sonarr_ep_set_dry = sonarr_ep_sets[dry_s_id]
+
+                                # Implicit older episodes: on disk in Sonarr but not in watch history
+                                would_act_implicit: set = set()
+                                if force_delete_older and unique_eps:
+                                    # Per-season, per-user max episode.
+                                    # user_season_maxes_dry: {season -> {user_key -> max_ep}}
+                                    _user_season_maxes_dry: dict = {}
+                                    for _itm_dry in group["items"]:
+                                        _uk_d = _itm_dry.get("_user_key", "")
+                                        _sd = _itm_dry.get("season")
+                                        _ed = _itm_dry.get("episode")
+                                        if _sd is None or _ed is None:
+                                            continue
+                                        if _sd not in _user_season_maxes_dry:
+                                            _user_season_maxes_dry[_sd] = {}
+                                        if _ed > _user_season_maxes_dry[_sd].get(_uk_d, 0):
+                                            _user_season_maxes_dry[_sd][_uk_d] = _ed
+                                    # All users who have any watch in this series
+                                    _all_series_users_dry: set = set()
+                                    for _su in _user_season_maxes_dry.values():
+                                        _all_series_users_dry.update(_su.keys())
+                                    _watched_se_g = set(unique_eps.keys())
+                                    if dry_s_id not in sonarr_ep_full_cache:
+                                        sonarr_ep_full_cache[dry_s_id] = sonarr.get_episodes(dry_s_id)
+                                    for _ep_impl in sonarr_ep_full_cache[dry_s_id]:
+                                        _s_i = _ep_impl["seasonNumber"]
+                                        _e_i = _ep_impl["episodeNumber"]
+                                        if _s_i == 0:
+                                            continue
+                                        # Skip seasons where any RULE-SCOPED user has no recorded watch.
+                                        # required_user_keys covers all users the rule targets — if any
+                                        # of them has zero watches in this season, skip the season.
+                                        _s_users_dry = _user_season_maxes_dry.get(_s_i, {})
+                                        if not required_user_keys.issubset(set(_s_users_dry.keys())):
+                                            continue
+                                        _season_wm_dry = min(_s_users_dry.values())
+                                        if _e_i >= _season_wm_dry:
+                                            continue
+                                        if (_s_i, _e_i) in _watched_se_g:
+                                            continue
+                                        if _ep_impl.get("episodeFileId", 0) == 0:
+                                            continue
+                                        _ep_key_i = f"{rule_id}:ep:{sonarr_tvdb_id}:S{_s_i:02d}E{_e_i:02d}"
+                                        if self.state.is_processed(_ep_key_i):
+                                            continue
+                                        if keep_last > 0 and (_s_i, _e_i) in this_protected:
+                                            continue
+                                        would_act_implicit.add((_s_i, _e_i))
 
                                 would_act: set = set()
                                 would_keep: set = set()
@@ -985,7 +1041,7 @@ class ErasarrMonitor:
                                 if rule_actions.get("add_tag"): acts.append(f"tag:{rule_actions['add_tag']}")
                                 acts_str = " + ".join(acts) or "no actions"
 
-                                if already_done and not would_act and not this_protected and not would_pending and not would_waiting_users:
+                                if already_done and not would_act and not would_act_implicit and not this_protected and not would_pending and not would_waiting_users:
                                     show_output.append(f"  ✓ {series_name}:  [all {already_done} eps already processed]")
                                     break
 
@@ -993,6 +1049,9 @@ class ErasarrMonitor:
                                 if would_act:
                                     show_output.append(f"    Process ({acts_str}):")
                                     show_output += self._format_seasons(would_act)
+                                if would_act_implicit:
+                                    show_output.append(f"    Process ({acts_str}) [older — not in watch history]:")
+                                    show_output += self._format_seasons(would_act_implicit)
                                 if this_protected:
                                     # Show every episode in the protection window, including those
                                     # not yet watched (they won't be in would_keep but are still safe).
@@ -1007,7 +1066,7 @@ class ErasarrMonitor:
                                 if already_done:
                                     show_output.append(f"    ({already_done} of {len(unique_eps)} eps already processed)")
                                 # Populate dry_run_preview for dashboard (honours keep-last)
-                                for (s, e) in would_act | would_pending:
+                                for (s, e) in would_act | would_pending | would_act_implicit:
                                     ep_item = unique_eps.get((s, e), {})
                                     self.state.add_dry_run_preview(
                                         f"{rule_id}:ep:{sonarr_tvdb_id}:S{s:02d}E{e:02d}",
@@ -1062,6 +1121,8 @@ class ErasarrMonitor:
                             self._log(f"  [{len(not_in_sonarr_names)} shows not in Sonarr — SKIP]")
                         self._log("")
 
+                # Per-series high-watermark tracking for force_delete_older feature
+                series_watermarks_map: dict = {}
                 # Track which (sonarr_instance_id, series_id) combos have been tagged
                 # this run — tag is show-level, no need to re-apply for every episode
                 tagged_series_this_run: set = set()
@@ -1098,6 +1159,26 @@ class ErasarrMonitor:
 
                         show_title = item.get("series_name") or series["title"]
                         ep_label = f"{show_title} S{season:02d}E{episode_num:02d}"
+                        # Track per-series watermark for force_delete_older feature.
+                        # user_maxes tracks each user's personal maximum episode so we can
+                        # take the min-of-maxes as the safe watermark for multi-user rules.
+                        if force_delete_older:
+                            _inst_key = (sid, series["id"])
+                            _user_key_item = item.get("_user_key", "")
+                            _wm = series_watermarks_map.get(_inst_key)
+                            if _wm is None:
+                                series_watermarks_map[_inst_key] = {
+                                    "sonarr": sonarr, "series": series,
+                                    "tvdb_id": tvdb_id, "show_title": show_title,
+                                    "user_maxes": {_user_key_item: (season, episode_num)},
+                                    "watched_se": {(season, episode_num)},
+                                    "sid": sid,
+                                }
+                            else:
+                                _wm["watched_se"].add((season, episode_num))
+                                _cur_max = _wm["user_maxes"].get(_user_key_item, (0, 0))
+                                if (season, episode_num) > _cur_max:
+                                    _wm["user_maxes"][_user_key_item] = (season, episode_num)
                         key = f"{rule_id}:ep:{tvdb_id}:S{season:02d}E{episode_num:02d}"
                         if self.state.is_processed(key):
                             continue
@@ -1200,6 +1281,80 @@ class ErasarrMonitor:
                                     })
                             except Exception as _err:
                                 self._log(f"      ✗ Failed to process {ep_label}: {_err}", "error")
+
+                # ── Implicit older episode deletion (force_delete_older_if_newer_watched) ──
+                if force_delete_older and not dry_run and series_watermarks_map:
+                    self._log("  [Episodes — implicit older, not in watch history]")
+                    for (_inst_sid, _ser_id), _sdata in series_watermarks_map.items():
+                        _sonarr = _sdata["sonarr"]
+                        _series = _sdata["series"]
+                        _tvdb_id = _sdata["tvdb_id"]
+                        _show_title = _sdata["show_title"]
+                        _user_season_maxes = _sdata.get("user_season_maxes", {})
+                        # Use required_user_keys (all users the rule targets) — not just those
+                        # who watched this series — so any in-scope user with zero season watches
+                        # blocks implicit deletion for that season.
+                        _watched_se = _sdata["watched_se"]
+                        _, _act_tag_id = sonarr_tag_ids.get(_inst_sid, (None, None))
+                        if _ser_id not in sonarr_ep_full_cache:
+                            sonarr_ep_full_cache[_ser_id] = _sonarr.get_episodes(_ser_id)
+                        for _ep_data in sonarr_ep_full_cache[_ser_id]:
+                            _s = _ep_data["seasonNumber"]
+                            _e = _ep_data["episodeNumber"]
+                            if _s == 0:
+                                continue
+                            # Only process seasons where ALL rule-scoped users have a recorded watch
+                            _season_users = _user_season_maxes.get(_s, {})
+                            if not required_user_keys.issubset(set(_season_users.keys())):
+                                continue
+                            # Per-season watermark = min of each user's max episode in this season
+                            _season_wm = min(_season_users.values())
+                            if _e >= _season_wm:
+                                continue
+                            if (_s, _e) in _watched_se:
+                                continue
+                            if _ep_data.get("episodeFileId", 0) == 0:
+                                continue
+                            _ep_label = f"{_show_title} S{_s:02d}E{_e:02d}"
+                            _key = f"{rule_id}:ep:{_tvdb_id}:S{_s:02d}E{_e:02d}"
+                            if self.state.is_processed(_key):
+                                continue
+                            if keep_last > 0:
+                                if keep_last_by_time:
+                                    _is_protected = (_s, _e) in series_protected_by_time.get(
+                                        _show_title.strip().lower(), set())
+                                else:
+                                    _is_protected = (_s, _e) in sonarr_ep_protections.get(_ser_id, set())
+                            else:
+                                _is_protected = False
+                            try:
+                                _sfx = " [keep-last]" if _is_protected else " [older — not in library]"
+                                self._log(f"    📺 Processing: {_ep_label}{_sfx}")
+                                if rule_actions.get("unmonitor"):
+                                    _sonarr.unmonitor_episode(_ep_data)
+                                    self._log("      ✓ Unmonitored")
+                                if _act_tag_id:
+                                    _tk = (_inst_sid, _ser_id)
+                                    if _tk not in tagged_series_this_run:
+                                        _sonarr.add_tag_to_series(_series, _act_tag_id)
+                                        tagged_series_this_run.add(_tk)
+                                        self._log(f"      ✓ Show tagged: {rule_actions['add_tag']}")
+                                if rule_actions.get("delete_file") and not _is_protected:
+                                    _ep_size = _sonarr.get_episode_file_size(_ep_data)
+                                    _sonarr.delete_episode_file(_ep_data)
+                                    self._log("      ✓ File deleted")
+                                elif _is_protected and rule_actions.get("delete_file"):
+                                    _ep_size = 0
+                                    self._log(f"      ⏸ File kept (keep last {keep_last})")
+                                else:
+                                    _ep_size = 0
+                                if not (_is_protected and rule_actions.get("delete_file")):
+                                    self.state.mark_processed(_key, {
+                                        "title": _ep_label, "type": "episode",
+                                        "rule": rule_name, "size_bytes": _ep_size,
+                                    })
+                            except Exception as _err2:
+                                self._log(f"      ✗ Failed: {_ep_label}: {_err2}", "error")
 
             # ── Media Server Direct Delete (episodes not managed by Sonarr) ──
             # Applies to both Emby and Jellyfin servers.

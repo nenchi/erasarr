@@ -52,6 +52,7 @@
           {% if rule.actions.add_tag %}{% set acts.list = acts.list + ['Tag: ' + rule.actions.add_tag] %}{% endif %}
           {% if rule.actions.delay_days %}{% set acts.list = acts.list + [rule.actions.delay_days | string + 'd delay'] %}{% endif %}
           {% if rule.actions.keep_last_episodes %}{% set acts.list = acts.list + ['Keep last ' + rule.actions.keep_last_episodes | string + ' eps'] %}{% endif %}
+          {% if rule.actions.force_delete_older_if_newer_watched %}{% set acts.list = acts.list + ['Del older if newer'] %}{% endif %}
           {{ acts.list | join(', ') or '— no actions —' }}
         </td>
         <td class="col-hide-mobile" style="white-space:nowrap">
@@ -340,6 +341,16 @@
 
       <div class="toggle-row">
         <div>
+          <div class="toggle-label">Delete Older if Newer Watched</div>
+          <div class="toggle-desc">If a user has watched a newer episode (e.g. S02E14), automatically process older Sonarr-managed episodes on disk that are not in the watch history — assumes they were watched elsewhere. <strong>Episodes / Sonarr only.</strong> Works alongside "Require All Users Watched": explicit episodes still need all users to have watched them, while older episodes use the per-season safety check. Safety: a season is only touched if <em>every</em> targeted user has at least one recorded watch in that season.</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="rule-force-delete-older"><span class="toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
           <div class="toggle-label">Keep Last N by Watch Time</div>
           <div class="toggle-desc">When enabled, <em>Keep Last N Episodes</em> protects the N most recently <strong>watched</strong> episodes (by timestamp). When off (default), protects the N highest-numbered episodes in Sonarr.</div>
         </div>
@@ -552,6 +563,8 @@ function openRuleModal(ruleId) {
     document.getElementById('rule-delete-from-emby').checked = !!acts.delete_from_emby;
     document.getElementById('rule-require-all-watched').checked = !!acts.require_all_users_watched;
     document.getElementById('rule-keep-last-by-time').checked = !!acts.keep_last_by_watch_time;
+    document.getElementById('rule-force-delete-older').checked = !!acts.force_delete_older_if_newer_watched;
+    document.getElementById('rule-force-delete-older').disabled = false;
     document.getElementById('rule-add-tag').value = acts.add_tag || '';
     document.getElementById('rule-delay-days').value = acts.delay_days || 0;
     document.getElementById('rule-keep-last').value = acts.keep_last_episodes || 0;
@@ -587,6 +600,8 @@ function openRuleModal(ruleId) {
     document.getElementById('rule-delete-from-emby').checked = false;
     document.getElementById('rule-require-all-watched').checked = false;
     document.getElementById('rule-keep-last-by-time').checked = false;
+    document.getElementById('rule-force-delete-older').checked = false;
+    document.getElementById('rule-force-delete-older').disabled = false;
     document.getElementById('rule-add-tag').value = '';
     document.getElementById('rule-delay-days').value = 0;
     document.getElementById('rule-keep-last').value = 0;
@@ -652,6 +667,7 @@ async function saveRule() {
     delete_from_emby: document.getElementById('rule-delete-from-emby').checked,
     require_all_users_watched: document.getElementById('rule-require-all-watched').checked,
     keep_last_by_watch_time: document.getElementById('rule-keep-last-by-time').checked,
+    force_delete_older_if_newer_watched: document.getElementById('rule-force-delete-older').checked,
     add_tag: document.getElementById('rule-add-tag').value.trim(),
     delay_days: parseInt(document.getElementById('rule-delay-days').value) || 0,
     keep_last_episodes: parseInt(document.getElementById('rule-keep-last').value) || 0,

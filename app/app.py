@@ -829,6 +829,7 @@ def _rule_from_request(data: dict, existing: dict = None) -> dict:
             "add_tag": (data.get("add_tag") or "").strip(),
             "delay_days": int(data.get("delay_days") or 0),
             "keep_last_episodes": int(data.get("keep_last_episodes") or 0),
+            "force_delete_older_if_newer_watched": bool(data.get("force_delete_older_if_newer_watched", False)),
         },
     }
 

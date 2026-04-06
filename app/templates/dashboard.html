@@ -26,22 +26,24 @@
 </style>
 
 <script>
+{% set _has_radarr = cfg.radarr_instances | selectattr('enabled') | list | length > 0 %}
+{% set _has_sonarr = cfg.sonarr_instances | selectattr('enabled') | list | length > 0 %}
 const _dryPhrases = [
   "Fetching watch history…",
-  "Querying Sonarr for series…",
-  "Querying Radarr for movies…",
+  {% if _has_sonarr %}"Querying Sonarr for series…",{% endif %}
+  {% if _has_radarr %}"Querying Radarr for movies…",{% endif %}
   "Computing keep-last protection sets…",
-  "Classifying episodes…",
+  {% if _has_sonarr %}"Classifying episodes…",{% endif %}
   "Building dry-run preview…",
   "Almost done…",
 ];
 const _realPhrases = [
   "Fetching watch history…",
-  "Querying Sonarr for series…",
-  "Querying Radarr for movies…",
+  {% if _has_sonarr %}"Querying Sonarr for series…",{% endif %}
+  {% if _has_radarr %}"Querying Radarr for movies…",{% endif %}
   "Computing keep-last protection sets…",
-  "Processing episodes…",
-  "Processing movies…",
+  {% if _has_sonarr %}"Processing episodes…",{% endif %}
+  {% if _has_radarr %}"Processing movies…",{% endif %}
   "Cleaning up…",
   "Finishing up…",
 ];
