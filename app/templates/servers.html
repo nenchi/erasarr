@@ -4,49 +4,13 @@
 {% block page_sub %}Connect Emby and Jellyfin instances{% endblock %}
 
 {% block content %}
-<!-- Add Server -->
+<!-- Connected Servers -->
 <div class="card">
-  <div class="card-title">◈ Add Media Server</div>
-  <form method="POST">
-    <input type="hidden" name="action" value="add_server">
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Display Name</label>
-        <input class="form-input" type="text" name="name" placeholder="My Jellyfin" required>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Type</label>
-        <select class="form-select" name="type" id="server-type-select">
-          <option value="jellyfin">Jellyfin</option>
-          <option value="emby">Emby</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Address</label>
-        <input class="form-input" type="text" name="address" id="server-address" placeholder="http://192.168.1.100:8096" required>
-        <div class="form-hint">Include http:// and port. No trailing slash.</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">API Key</label>
-        <input class="form-input" type="text" name="api_key" id="server-apikey" placeholder="Your API key">
-        <div class="form-hint">Jellyfin: Dashboard → API Keys. Emby: Dashboard → API Keys.</div>
-      </div>
-    </div>
-    <div class="btn-group">
-      <button type="submit" class="btn btn-primary">+ Add Server</button>
-      <button type="button" class="btn btn-ghost" onclick="testServer()">⚡ Test Connection</button>
-      <button type="button" class="btn btn-ghost" onclick="fetchUsers()">👥 Fetch Users</button>
-      <span class="test-result" id="test-result"></span>
-    </div>
-  </form>
-</div>
-
-<!-- Existing Servers -->
-{% if cfg.media_servers %}
-<div class="card">
-  <div class="card-title">◉ Connected Servers</div>
+  <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+    <span>◉ Connected Servers</span>
+    <button class="btn btn-primary btn-sm" onclick="openAddServer()">⊕ Add Media Server</button>
+  </div>
+  {% if cfg.media_servers %}
   <table class="table table-desktop">
     <thead>
       <tr><th>Name</th><th>Type</th><th class="col-hide-mobile">Address</th><th>Status</th><th></th></tr>
@@ -108,13 +72,60 @@
     </div>
     {% endfor %}
   </div>
+  {% else %}
+  <div style="text-align:center;padding:32px 0;color:var(--muted)">
+    <div style="font-size:32px;margin-bottom:12px">◌</div>
+    <div style="font-size:14px">No media servers connected yet.</div>
+    <div style="font-size:12px;margin-top:6px">Click <strong>⊕ Add Media Server</strong> to get started.</div>
+  </div>
+  {% endif %}
 </div>
-{% endif %}
 
-<!-- User Preview -->
-<div id="user-preview" style="display:none" class="card">
-  <div class="card-title">👥 Users Found</div>
-  <div id="user-list"></div>
+<!-- Add Server Modal -->
+<div class="modal-overlay hidden" id="add-server-overlay" onclick="closeAddServer(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeAddServer()">✕</button>
+    <div class="modal-title">Add Media Server</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Display Name</label>
+        <input class="form-input" type="text" id="add-server-name" placeholder="My Jellyfin">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-select" id="add-server-type">
+          <option value="jellyfin">Jellyfin</option>
+          <option value="emby">Emby</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Address</label>
+        <input class="form-input" type="text" id="add-server-address" placeholder="http://192.168.1.100:8096">
+        <div class="form-hint">Include http:// and port. No trailing slash.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input class="form-input" type="text" id="add-server-apikey" placeholder="Your API key">
+        <div class="form-hint">Jellyfin: Dashboard → API Keys. Emby: Dashboard → API Keys.</div>
+      </div>
+    </div>
+    <div class="btn-group" style="margin-top:12px">
+      <button type="button" class="btn btn-ghost" onclick="testAddServer()">⚡ Test Connection</button>
+      <button type="button" class="btn btn-ghost" onclick="fetchAddUsers()">👥 Fetch Users</button>
+      <span class="test-result" id="add-test-result"></span>
+    </div>
+    <div id="add-user-preview" style="display:none;margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;max-height:180px;overflow-y:auto">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Users on this server:</div>
+      <div id="add-user-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveAddServer()">Add Server</button>
+      <button class="btn btn-ghost" onclick="closeAddServer()">Cancel</button>
+      <span id="add-save-result" style="margin-left:auto;font-size:12px"></span>
+    </div>
+  </div>
 </div>
 
 <!-- Edit Server Modal -->
@@ -164,65 +175,121 @@
 </div>
 
 <script>
-function getFormData() {
+// ── Add Server Modal ──
+function openAddServer() {
+  document.getElementById('add-server-name').value = '';
+  document.getElementById('add-server-type').value = 'jellyfin';
+  document.getElementById('add-server-address').value = '';
+  document.getElementById('add-server-apikey').value = '';
+  document.getElementById('add-test-result').textContent = '';
+  document.getElementById('add-user-preview').style.display = 'none';
+  document.getElementById('add-save-result').textContent = '';
+  document.getElementById('add-server-overlay').classList.remove('hidden');
+}
+
+function closeAddServer(e) {
+  if (e && e.target !== document.getElementById('add-server-overlay')) return;
+  document.getElementById('add-server-overlay').classList.add('hidden');
+}
+
+function getAddServerData() {
   return {
-    type: document.getElementById('server-type-select').value,
-    address: document.getElementById('server-address').value,
-    api_key: document.getElementById('server-apikey').value,
+    type: document.getElementById('add-server-type').value,
+    address: document.getElementById('add-server-address').value,
+    api_key: document.getElementById('add-server-apikey').value,
   };
 }
 
-async function testServer() {
-  const el = document.getElementById('test-result');
-  el.textContent = 'Testing...';
-  el.className = 'test-result';
+async function testAddServer() {
+  const el = document.getElementById('add-test-result');
+  el.textContent = 'Testing...'; el.className = 'test-result';
   try {
     const r = await fetch('/api/test-server', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(getFormData())
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(getAddServerData())
     });
     const d = await r.json();
     el.textContent = d.ok ? '✓ ' + d.msg : '✗ ' + d.msg;
     el.className = 'test-result ' + (d.ok ? 'test-ok' : 'test-fail');
   } catch(e) {
-    el.textContent = '✗ Request failed';
-    el.className = 'test-result test-fail';
+    el.textContent = '✗ Request failed'; el.className = 'test-result test-fail';
   }
 }
 
-async function fetchUsers() {
-  const el = document.getElementById('test-result');
-  el.textContent = 'Fetching users...';
-  el.className = 'test-result';
+async function fetchAddUsers() {
+  const el = document.getElementById('add-test-result');
+  el.textContent = 'Fetching users...'; el.className = 'test-result';
   try {
     const r = await fetch('/api/server-users', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(getFormData())
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(getAddServerData())
     });
     const d = await r.json();
     if (d.ok) {
-      el.textContent = `✓ Found ${d.users.length} users`;
-      el.className = 'test-result test-ok';
-      const list = document.getElementById('user-list');
-      list.innerHTML = d.users.map(u =>
-        `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;">
-          <strong>${u.name}</strong> <span style="color:var(--muted);font-size:11px;font-family:var(--mono)">${u.id}</span>
+      el.textContent = `✓ Found ${d.users.length} users`; el.className = 'test-result test-ok';
+      document.getElementById('add-user-list').innerHTML = d.users.map(u =>
+        `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+          <strong>${u.name}</strong> <span style="color:var(--muted);font-family:var(--mono)">${u.id}</span>
         </div>`
       ).join('');
-      document.getElementById('user-preview').style.display = 'block';
+      document.getElementById('add-user-preview').style.display = 'block';
     } else {
-      el.textContent = '✗ ' + d.msg;
-      el.className = 'test-result test-fail';
+      el.textContent = '✗ ' + d.msg; el.className = 'test-result test-fail';
     }
   } catch(e) {
-    el.textContent = '✗ Request failed';
-    el.className = 'test-result test-fail';
+    el.textContent = '✗ Request failed'; el.className = 'test-result test-fail';
   }
 }
 
-// Edit modal
+async function saveAddServer() {
+  const saveEl = document.getElementById('add-save-result');
+  const testEl = document.getElementById('add-test-result');
+  const data = getAddServerData();
+
+  if (!data.address) {
+    saveEl.textContent = '✗ Address is required'; saveEl.style.color = 'var(--danger)'; return;
+  }
+
+  // Test connection first — validates address, key AND server type
+  saveEl.textContent = 'Verifying...'; saveEl.style.color = 'var(--muted)';
+  testEl.textContent = 'Testing...'; testEl.className = 'test-result';
+  try {
+    const tr = await fetch('/api/test-server', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    const td = await tr.json();
+    testEl.textContent = td.ok ? '✓ ' + td.msg : '✗ ' + td.msg;
+    testEl.className = 'test-result ' + (td.ok ? 'test-ok' : 'test-fail');
+    if (!td.ok) {
+      saveEl.textContent = '✗ Fix connection errors before saving'; saveEl.style.color = 'var(--danger)';
+      return;
+    }
+  } catch(e) {
+    testEl.textContent = '✗ Request failed'; testEl.className = 'test-result test-fail';
+    saveEl.textContent = '✗ Could not reach server'; saveEl.style.color = 'var(--danger)';
+    return;
+  }
+
+  // Test passed — save
+  saveEl.textContent = 'Saving...'; saveEl.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/add-server', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name: document.getElementById('add-server-name').value,
+        ...data,
+      })
+    });
+    const d = await r.json();
+    if (d.ok) { window.location.reload(); }
+    else { saveEl.textContent = '✗ Save failed'; saveEl.style.color = 'var(--danger)'; }
+  } catch(e) {
+    saveEl.textContent = '✗ Request failed'; saveEl.style.color = 'var(--danger)';
+  }
+}
+
+// ── Edit Server Modal ──
 function openEditServer(id, name, type, address, apiKey) {
   document.getElementById('edit-server-id').value = id;
   document.getElementById('edit-server-name').value = name;

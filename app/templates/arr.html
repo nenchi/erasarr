@@ -4,6 +4,9 @@
 {% block page_sub %}Connect Radarr and Sonarr instances{% endblock %}
 
 {% block content %}
+<div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+  <button class="btn btn-primary" onclick="openAddArr()">⊕ Add New Instance</button>
+</div>
 <!-- Radarr Instances -->
 <div class="card">
   <div class="card-title">◉ Radarr Instances (Movies)</div>
@@ -58,36 +61,11 @@
     </div>
     {% endfor %}
   </div>
-  {% endif %}
-
-  <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:4px;">
-    <div style="font-size:13px;font-weight:500;margin-bottom:14px;">Add Radarr Instance</div>
-    <form method="POST">
-      <input type="hidden" name="action" value="add_radarr">
-      <div class="form-row-3">
-        <div class="form-group">
-          <label class="form-label">Name</label>
-          <input class="form-input" type="text" name="radarr_name" placeholder="Radarr 4K" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Address</label>
-          <input class="form-input" type="text" name="radarr_address" id="radarr-address" placeholder="http://192.168.1.100:7878" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">API Key</label>
-          <input class="form-input" type="text" name="radarr_api_key" id="radarr-apikey" placeholder="Your Radarr API key">
-          <div class="form-hint">Radarr → Settings → General → API Key</div>
-        </div>
-      </div>
-      <div class="btn-group">
-        <button type="submit" class="btn btn-primary">+ Add Radarr</button>
-        <button type="button" class="btn btn-ghost" onclick="testRadarr()">⚡ Test</button>
-        <button type="button" class="btn btn-ghost" onclick="fetchRadarrTags()">🏷 Fetch Tags</button>
-        <span class="test-result" id="radarr-result"></span>
-      </div>
-    </form>
-    <div id="radarr-tags" style="display:none;margin-top:12px;"></div>
+  {% else %}
+  <div style="text-align:center;padding:24px 0;color:var(--muted)">
+    <div style="font-size:13px">No Radarr instances connected yet.</div>
   </div>
+  {% endif %}
 </div>
 
 <!-- Sonarr Instances -->
@@ -146,35 +124,59 @@
     </div>
     {% endfor %}
   </div>
+  {% else %}
+  <div style="text-align:center;padding:24px 0;color:var(--muted)">
+    <div style="font-size:13px">No Sonarr instances connected yet.</div>
+  </div>
   {% endif %}
+</div>
 
-  <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:4px;">
-    <div style="font-size:13px;font-weight:500;margin-bottom:14px;">Add Sonarr Instance</div>
-    <form method="POST">
-      <input type="hidden" name="action" value="add_sonarr">
-      <div class="form-row-3">
-        <div class="form-group">
-          <label class="form-label">Name</label>
-          <input class="form-input" type="text" name="sonarr_name" placeholder="Sonarr 4K" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Address</label>
-          <input class="form-input" type="text" name="sonarr_address" id="sonarr-address" placeholder="http://192.168.1.100:8989" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">API Key</label>
-          <input class="form-input" type="text" name="sonarr_api_key" id="sonarr-apikey" placeholder="Your Sonarr API key">
-          <div class="form-hint">Sonarr → Settings → General → API Key</div>
-        </div>
+<!-- Add Arr Instance Modal -->
+<div class="modal-overlay hidden" id="add-arr-overlay" onclick="closeAddArr(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeAddArr()">✕</button>
+    <div class="modal-title">Add New Instance</div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label class="form-label">Type</label>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;border:1px solid var(--border);border-radius:8px;padding:10px 12px;transition:border-color 0.15s" id="arr-type-radarr-label">
+          <input type="radio" name="add-arr-type" id="add-arr-type-radarr" value="radarr" checked onchange="onArrTypeChange()">
+          <span style="font-weight:500">🎬 Radarr</span>
+          <span style="font-size:11px;color:var(--muted);margin-left:auto">Movies</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;border:1px solid var(--border);border-radius:8px;padding:10px 12px;transition:border-color 0.15s" id="arr-type-sonarr-label">
+          <input type="radio" name="add-arr-type" id="add-arr-type-sonarr" value="sonarr" onchange="onArrTypeChange()">
+          <span style="font-weight:500">📺 Sonarr</span>
+          <span style="font-size:11px;color:var(--muted);margin-left:auto">TV Shows</span>
+        </label>
       </div>
-      <div class="btn-group">
-        <button type="submit" class="btn btn-primary">+ Add Sonarr</button>
-        <button type="button" class="btn btn-ghost" onclick="testSonarr()">⚡ Test</button>
-        <button type="button" class="btn btn-ghost" onclick="fetchSonarrTags()">🏷 Fetch Tags</button>
-        <span class="test-result" id="sonarr-result"></span>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input class="form-input" type="text" id="add-arr-name" placeholder="Radarr 4K">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Address</label>
+        <input class="form-input" type="text" id="add-arr-address" placeholder="http://192.168.1.100:7878">
       </div>
-    </form>
-    <div id="sonarr-tags" style="display:none;margin-top:12px;"></div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input class="form-input" type="text" id="add-arr-apikey" placeholder="Your API key">
+        <div class="form-hint" id="add-arr-apikey-hint">Radarr → Settings → General → API Key</div>
+      </div>
+    </div>
+    <div class="btn-group" style="margin-top:12px">
+      <button type="button" class="btn btn-ghost" onclick="testAddArr()">⚡ Test Connection</button>
+      <button type="button" class="btn btn-ghost" onclick="fetchAddArrTags()">🏷 Fetch Tags</button>
+      <span class="test-result" id="add-arr-result"></span>
+    </div>
+    <div id="add-arr-tags" style="display:none;margin-top:12px;"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveAddArr()">Add Instance</button>
+      <button class="btn btn-ghost" onclick="closeAddArr()">Cancel</button>
+      <span id="add-arr-save-result" style="margin-left:auto;font-size:12px"></span>
+    </div>
   </div>
 </div>
 
@@ -253,35 +255,129 @@
 </div>
 
 <script>
-async function testRadarr() {
-  const el = document.getElementById('radarr-result');
-  el.textContent = 'Testing...'; el.className = 'test-result';
-  const r = await fetch('/api/test-radarr', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      address: document.getElementById('radarr-address').value,
-      api_key: document.getElementById('radarr-apikey').value,
-    })
-  });
-  const d = await r.json();
-  el.textContent = d.ok ? '✓ v' + d.msg : '✗ ' + d.msg;
-  el.className = 'test-result ' + (d.ok ? 'test-ok' : 'test-fail');
+// ── Add Arr Modal ──
+function getAddArrType() {
+  return document.querySelector('input[name="add-arr-type"]:checked').value;
 }
 
-async function fetchRadarrTags() {
-  const r = await fetch('/api/radarr-tags', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+function onArrTypeChange() {
+  const type = getAddArrType();
+  const isRadarr = type === 'radarr';
+  document.getElementById('add-arr-name').placeholder = isRadarr ? 'Radarr 4K' : 'Sonarr 4K';
+  document.getElementById('add-arr-address').placeholder = isRadarr ? 'http://192.168.1.100:7878' : 'http://192.168.1.100:8989';
+  document.getElementById('add-arr-apikey-hint').textContent = isRadarr
+    ? 'Radarr \u2192 Settings \u2192 General \u2192 API Key'
+    : 'Sonarr \u2192 Settings \u2192 General \u2192 API Key';
+  document.getElementById('arr-type-radarr-label').style.borderColor = isRadarr ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('arr-type-sonarr-label').style.borderColor = !isRadarr ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('add-arr-result').textContent = '';
+  document.getElementById('add-arr-tags').style.display = 'none';
+}
+
+function openAddArr(defaultType) {
+  document.getElementById('add-arr-type-radarr').checked = true;
+  if (defaultType === 'sonarr') document.getElementById('add-arr-type-sonarr').checked = true;
+  onArrTypeChange();
+  document.getElementById('add-arr-name').value = '';
+  document.getElementById('add-arr-address').value = '';
+  document.getElementById('add-arr-apikey').value = '';
+  document.getElementById('add-arr-result').textContent = '';
+  document.getElementById('add-arr-tags').style.display = 'none';
+  document.getElementById('add-arr-save-result').textContent = '';
+  document.getElementById('add-arr-overlay').classList.remove('hidden');
+}
+
+function closeAddArr(e) {
+  if (e && e.target !== document.getElementById('add-arr-overlay')) return;
+  document.getElementById('add-arr-overlay').classList.add('hidden');
+}
+
+async function testAddArr() {
+  const el = document.getElementById('add-arr-result');
+  el.textContent = 'Testing...'; el.className = 'test-result';
+  const type = getAddArrType();
+  const endpoint = type === 'sonarr' ? '/api/test-sonarr' : '/api/test-radarr';
+  try {
+    const r = await fetch(endpoint, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        address: document.getElementById('add-arr-address').value,
+        api_key: document.getElementById('add-arr-apikey').value,
+      })
+    });
+    const d = await r.json();
+    el.textContent = d.ok ? '\u2713 v' + d.msg : '\u2717 ' + d.msg;
+    el.className = 'test-result ' + (d.ok ? 'test-ok' : 'test-fail');
+  } catch(err) {
+    el.textContent = '\u2717 Request failed'; el.className = 'test-result test-fail';
+  }
+}
+
+async function fetchAddArrTags() {
+  const type = getAddArrType();
+  const endpoint = type === 'sonarr' ? '/api/sonarr-tags' : '/api/radarr-tags';
+  const r = await fetch(endpoint, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      address: document.getElementById('radarr-address').value,
-      api_key: document.getElementById('radarr-apikey').value,
+      address: document.getElementById('add-arr-address').value,
+      api_key: document.getElementById('add-arr-apikey').value,
     })
   });
   const d = await r.json();
-  const el = document.getElementById('radarr-tags');
+  const el = document.getElementById('add-arr-tags');
   if (d.ok) {
     el.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Existing tags:</div>' +
       (d.tags.length ? d.tags.map(t => `<span class="badge badge-blue" style="margin:2px">${t}</span>`).join('') : '<span style="color:var(--muted);font-size:12px">No tags yet</span>');
     el.style.display = 'block';
+  }
+}
+
+async function saveAddArr() {
+  const saveEl = document.getElementById('add-arr-save-result');
+  const testEl = document.getElementById('add-arr-result');
+  const type = getAddArrType();
+  const address = document.getElementById('add-arr-address').value.trim();
+  const api_key = document.getElementById('add-arr-apikey').value.trim();
+  const name = document.getElementById('add-arr-name').value.trim();
+
+  if (!address) {
+    saveEl.textContent = '✗ Address is required'; saveEl.style.color = 'var(--danger)'; return;
+  }
+
+  // Test connection first — validates address, key AND app type
+  saveEl.textContent = 'Verifying...'; saveEl.style.color = 'var(--muted)';
+  testEl.textContent = 'Testing...'; testEl.className = 'test-result';
+  try {
+    const testEndpoint = type === 'sonarr' ? '/api/test-sonarr' : '/api/test-radarr';
+    const tr = await fetch(testEndpoint, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ address, api_key })
+    });
+    const td = await tr.json();
+    testEl.textContent = td.ok ? '✓ ' + td.msg : '✗ ' + td.msg;
+    testEl.className = 'test-result ' + (td.ok ? 'test-ok' : 'test-fail');
+    if (!td.ok) {
+      saveEl.textContent = '✗ Fix connection errors before saving'; saveEl.style.color = 'var(--danger)';
+      return;
+    }
+  } catch(err) {
+    testEl.textContent = '✗ Request failed'; testEl.className = 'test-result test-fail';
+    saveEl.textContent = '✗ Could not reach server'; saveEl.style.color = 'var(--danger)';
+    return;
+  }
+
+  // Test passed — save
+  saveEl.textContent = 'Saving...'; saveEl.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/add-arr', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ arr_type: type, name, address, api_key })
+    });
+    const d = await r.json();
+    if (d.ok) { window.location.reload(); }
+    else { saveEl.textContent = '✗ Save failed'; saveEl.style.color = 'var(--danger)'; }
+  } catch(err) {
+    saveEl.textContent = '✗ Request failed'; saveEl.style.color = 'var(--danger)';
   }
 }
 
@@ -352,38 +448,6 @@ async function saveEditRadarr() {
     else { el.textContent = '✗ Save failed'; el.style.color = 'var(--danger)'; }
   } catch(e) {
     el.textContent = '✗ Request failed'; el.style.color = 'var(--danger)';
-  }
-}
-
-async function testSonarr() {
-  const el = document.getElementById('sonarr-result');
-  el.textContent = 'Testing...'; el.className = 'test-result';
-  const r = await fetch('/api/test-sonarr', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      address: document.getElementById('sonarr-address').value,
-      api_key: document.getElementById('sonarr-apikey').value,
-    })
-  });
-  const d = await r.json();
-  el.textContent = d.ok ? '✓ v' + d.msg : '✗ ' + d.msg;
-  el.className = 'test-result ' + (d.ok ? 'test-ok' : 'test-fail');
-}
-
-async function fetchSonarrTags() {
-  const r = await fetch('/api/sonarr-tags', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      address: document.getElementById('sonarr-address').value,
-      api_key: document.getElementById('sonarr-apikey').value,
-    })
-  });
-  const d = await r.json();
-  const el = document.getElementById('sonarr-tags');
-  if (d.ok) {
-    el.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Existing tags:</div>' +
-      (d.tags.length ? d.tags.map(t => `<span class="badge badge-blue" style="margin:2px">${t}</span>`).join('') : '<span style="color:var(--muted);font-size:12px">No tags yet</span>');
-    el.style.display = 'block';
   }
 }
 

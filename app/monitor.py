@@ -31,9 +31,39 @@ class EmbyClient:
         r.raise_for_status()
         return r.json()
 
+    def _detect_app_type(self) -> str:
+        """Return 'jellyfin', 'emby', or '' (unknown).
+        /System/Ping is unauthenticated and returns the app name as a plain
+        string on all modern Jellyfin and Emby builds. Falls back to
+        ProductName from the public info endpoint if ping doesn't help."""
+        try:
+            r = requests.get(f"{self.address}/System/Ping", timeout=10)
+            if r.ok:
+                text = r.text.strip().strip('"').lower()
+                if "jellyfin" in text:
+                    return "jellyfin"
+                if "emby" in text:
+                    return "emby"
+        except Exception:
+            pass
+        try:
+            r = requests.get(f"{self.address}/System/Info/Public", timeout=10)
+            if r.ok:
+                product = r.json().get("ProductName", "").lower()
+                if "jellyfin" in product:
+                    return "jellyfin"
+                if "emby" in product:
+                    return "emby"
+        except Exception:
+            pass
+        return ""
+
     def test_connection(self):
         try:
             data = self._get("/System/Info")
+            detected = self._detect_app_type()
+            if detected and detected != "emby":
+                return False, f"Wrong app — connected to {detected.capitalize()}, expected Emby"
             return True, data.get("ServerName", self.name)
         except Exception as e:
             return False, str(e)
@@ -104,6 +134,9 @@ class JellyfinClient(EmbyClient):
     def test_connection(self):
         try:
             data = self._get("/System/Info")
+            detected = self._detect_app_type()
+            if detected and detected != "jellyfin":
+                return False, f"Wrong app — connected to {detected.capitalize()}, expected Jellyfin"
             return True, data.get("ServerName", "Jellyfin")
         except Exception as e:
             return False, str(e)
@@ -176,6 +209,9 @@ class RadarrClient:
     def test_connection(self):
         try:
             data = self._get("/system/status")
+            app_name = data.get("appName", "")
+            if app_name and app_name.lower() != "radarr":
+                return False, f"Wrong app — connected to {app_name}, expected Radarr"
             return True, data.get("version", "OK")
         except Exception as e:
             return False, str(e)
@@ -248,6 +284,9 @@ class SonarrClient:
     def test_connection(self):
         try:
             data = self._get("/system/status")
+            app_name = data.get("appName", "")
+            if app_name and app_name.lower() != "sonarr":
+                return False, f"Wrong app — connected to {app_name}, expected Sonarr"
             return True, data.get("version", "OK")
         except Exception as e:
             return False, str(e)
@@ -974,6 +1013,10 @@ class ErasarrMonitor:
                             self._log(f"  [{len(not_in_sonarr_names)} shows not in Sonarr — SKIP]")
                         self._log("")
 
+                # Track which (sonarr_instance_id, series_id) combos have been tagged
+                # this run — tag is show-level, no need to re-apply for every episode
+                tagged_series_this_run: set = set()
+
                 for item in rule_watched:
                     if item["type"] != "Episode":
                         continue
@@ -1065,8 +1108,11 @@ class ErasarrMonitor:
                                     sonarr.unmonitor_episode(ep_data)
                                     self._log("      ✓ Unmonitored")
                                 if action_tag_id:
-                                    sonarr.add_tag_to_series(series, action_tag_id)
-                                    self._log(f"      ✓ Show tagged: {rule_actions['add_tag']}")
+                                    _tag_key = (sid, series["id"])
+                                    if _tag_key not in tagged_series_this_run:
+                                        sonarr.add_tag_to_series(series, action_tag_id)
+                                        tagged_series_this_run.add(_tag_key)
+                                        self._log(f"      ✓ Show tagged: {rule_actions['add_tag']}")
                                 if rule_actions.get("delete_file") and not is_protected:
                                     sonarr.delete_episode_file(ep_data)
                                     self._log("      ✓ File deleted")

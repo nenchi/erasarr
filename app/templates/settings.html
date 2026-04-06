@@ -130,7 +130,11 @@
 <form method="POST">
 <input type="hidden" name="action" value="save_schedule">
 <div class="card">
-  <div class="card-title">🕐 Default Schedule</div>
+  <div class="card-title" onclick="toggleScheduleCard()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none">
+    <span>🕐 Default Schedule</span>
+    <span id="schedule-chevron" style="font-size:13px;color:var(--muted);transition:transform 0.2s">▾</span>
+  </div>
+  <div id="schedule-card-body">
   <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">Applied to all actions without a custom schedule override.</div>
 
   <div class="radio-group">
@@ -193,12 +197,45 @@
       </div>
     </label>
   </div>
-</div>
-
-<div class="btn-group">
-  <button type="submit" class="btn btn-primary">Save Schedule</button>
+  <div class="btn-group" style="margin-top:16px">
+    <button type="submit" class="btn btn-primary">Save Schedule</button>
+  </div>
+  </div><!-- /schedule-card-body -->
 </div>
 </form>
+
+<script>
+(function() {
+  const body = document.getElementById('schedule-card-body');
+  const chevron = document.getElementById('schedule-chevron');
+  // Collapse by default; open if a non-manual schedule is active
+  const mode = '{{ cfg.get("schedule", {}).get("mode", "manual") }}';
+  let open = (mode !== 'manual');
+  body.style.overflow = 'hidden';
+  body.style.transition = 'max-height 0.25s ease, opacity 0.2s ease';
+  function apply(animate) {
+    if (open) {
+      body.style.maxHeight = body.scrollHeight + 200 + 'px';
+      body.style.opacity = '1';
+      chevron.style.transform = 'rotate(0deg)';
+    } else {
+      body.style.maxHeight = '0';
+      body.style.opacity = '0';
+      chevron.style.transform = 'rotate(-90deg)';
+    }
+  }
+  // Set initial state without animation
+  body.style.transition = 'none';
+  apply();
+  requestAnimationFrame(() => {
+    body.style.transition = 'max-height 0.25s ease, opacity 0.2s ease';
+  });
+  window.toggleScheduleCard = function() {
+    open = !open;
+    apply();
+  };
+})();
+</script>
 
 <!-- ── Rule Modal ── -->
 <div class="modal-overlay hidden" id="rule-modal-overlay" onclick="closeRuleModal(event)">

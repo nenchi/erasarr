@@ -17,9 +17,9 @@
 <!-- Stats -->
 <div class="stats-grid">
   <div class="stat-card">
-    <div class="stat-label">Processed Total</div>
-    <div class="stat-value">{{ state.get('processed', {})|length }}</div>
-    <div class="stat-sub">movies + episodes</div>
+    <div class="stat-label">Processed (last 30 days)</div>
+    <div class="stat-value">{{ processed_30d | compact }}</div>
+    <div class="stat-sub">{{ processed_7d | compact }} in last 7 days · {{ state.get('processed', {})|length | compact }} all-time</div>
   </div>
   <div class="stat-card">
     <div class="stat-label">Pending</div>

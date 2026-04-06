@@ -38,6 +38,16 @@ os.makedirs(DATA_DIR, exist_ok=True)
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 
+@app.template_filter("compact")
+def compact_number(n):
+    """Format large numbers as 1.2K, 3.4M etc."""
+    n = int(n)
+    if n >= 1_000_000:
+        return f"{n/1_000_000:.1f}M".rstrip("0").rstrip(".")
+    if n >= 1_000:
+        return f"{n/1_000:.1f}K".rstrip("0").rstrip(".")
+    return str(n)
+
 
 # ─────────────────────────────────────────────
 #  Database
@@ -421,6 +431,23 @@ def dashboard():
     pending_by_show, pending_movies = _build_pending_groups(state.get("pending", {}))
     preview_by_show, preview_movies = _build_pending_groups(state.get("dry_run_preview", {}))
 
+    # Processed counts by time window
+    now = datetime.now()
+    cutoff_7d  = now - timedelta(days=7)
+    cutoff_30d = now - timedelta(days=30)
+    processed_7d = processed_30d = 0
+    for item in state.get("processed", {}).values():
+        ts = item.get("processed_at", "")
+        if not ts:
+            continue
+        try:
+            item_dt = datetime.fromisoformat(ts)
+        except (ValueError, TypeError):
+            continue
+        if item_dt >= cutoff_7d:
+            processed_7d += 1
+        if item_dt >= cutoff_30d:
+            processed_30d += 1
     scheduled_jobs = []
     for job in scheduler.get_jobs():
         if job.id.startswith("monitor") and job.next_run_time:
@@ -441,6 +468,8 @@ def dashboard():
         preview_by_show=preview_by_show,
         preview_movies=preview_movies,
         scheduled_jobs=scheduled_jobs,
+        processed_7d=processed_7d,
+        processed_30d=processed_30d,
     )
 
 
@@ -684,6 +713,42 @@ def api_update_radarr():
             r["address"] = data.get("address", r["address"]).rstrip("/")
             r["api_key"] = data.get("api_key", r["api_key"])
             break
+    save_config(cfg)
+    return jsonify({"ok": True})
+
+@app.route("/api/add-server", methods=["POST"])
+@login_required
+def api_add_server():
+    data = request.json or {}
+    cfg = load_config()
+    cfg["media_servers"].append({
+        "id": secrets.token_hex(4),
+        "name": data.get("name", "").strip(),
+        "type": data.get("type", "jellyfin"),
+        "address": data.get("address", "").rstrip("/"),
+        "api_key": data.get("api_key", ""),
+        "enabled": True,
+    })
+    save_config(cfg)
+    return jsonify({"ok": True})
+
+@app.route("/api/add-arr", methods=["POST"])
+@login_required
+def api_add_arr():
+    data = request.json or {}
+    arr_type = data.get("arr_type", "radarr")
+    cfg = load_config()
+    entry = {
+        "id": secrets.token_hex(4),
+        "name": data.get("name", "").strip() or arr_type.capitalize(),
+        "address": data.get("address", "").rstrip("/"),
+        "api_key": data.get("api_key", ""),
+        "enabled": True,
+    }
+    if arr_type == "sonarr":
+        cfg.setdefault("sonarr_instances", []).append(entry)
+    else:
+        cfg.setdefault("radarr_instances", []).append(entry)
     save_config(cfg)
     return jsonify({"ok": True})
 
