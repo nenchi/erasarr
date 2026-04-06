@@ -214,3 +214,20 @@ Add SSL via Let's Encrypt / Certbot.
 **Want to reprocess something?**
 - Clear state from the Dashboard (resets all tracking)
 - Or manually edit `data/state.json`
+
+---
+
+## Disclaimer
+
+This tool is provided **as-is**, for personal use only, as an automation utility.
+
+- The author(s) take **no responsibility** for any data loss, deleted files, or unintended consequences resulting from the use of this software.
+- **You are solely responsible** for how you configure and run this tool on your own systems.
+- This project does **not** download, distribute, or interact with copyrighted content in any way — it only manages metadata and local files you already own and store on your own infrastructure.
+- Use this software **at your own risk**. Always test with a **Dry Run** before enabling live deletions.
+
+---
+
+## License
+
+MIT — free to use, modify, fork, and distribute. See [LICENSE](LICENSE) for the full text.
