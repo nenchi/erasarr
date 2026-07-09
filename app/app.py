@@ -32,11 +32,16 @@ logger = logging.getLogger("erasarr.web")
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 DB_FILE = os.path.join(DATA_DIR, "erasarr.db")
 STATE_FILE = os.path.join(DATA_DIR, "state.json")
+APP_VERSION = "1.0.2"
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+
+@app.context_processor
+def inject_version():
+    return {"app_version": APP_VERSION}
 
 @app.template_filter("compact")
 def compact_number(n):
