@@ -17,8 +17,6 @@ from datetime import datetime
 from monitor import ErasarrMonitor
 
 DATA_DIR = os.environ.get("DATA_DIR", "./data")
-DB_FILE = os.path.join(DATA_DIR, "erasarr.db")
-STATE_FILE = os.path.join(DATA_DIR, "state.json")
 
 def load_config_from_db(db_file: str) -> dict:
     if not os.path.exists(db_file):
@@ -32,8 +30,11 @@ def main():
     parser = argparse.ArgumentParser(description="Erasarr CLI")
     parser.add_argument("--dry-run", action="store_true", help="Preview actions without making changes")
     parser.add_argument("--data", default=DATA_DIR, help="Path to data directory")
-    parser.add_argument("--state", default=STATE_FILE, help="Path to state.json")
+    parser.add_argument("--state", default=None, help="Path to state.json (default: <data>/state.json)")
     args = parser.parse_args()
+    # Resolve after parsing so --state follows a custom --data instead of the
+    # module-level default (which is fixed to DATA_DIR/./data at import time).
+    state_file = args.state or os.path.join(args.data, "state.json")
 
     db_file = os.path.join(args.data, "erasarr.db")
     cfg = load_config_from_db(db_file)
@@ -47,7 +48,7 @@ def main():
     print(f"Erasarr CLI {'[DRY RUN] ' if args.dry_run else ''}— {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
-    monitor = ErasarrMonitor(cfg, args.state)
+    monitor = ErasarrMonitor(cfg, state_file)
     log_entries = monitor.run(dry_run=args.dry_run)
 
     print("\n── Log ──")

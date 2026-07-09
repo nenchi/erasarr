@@ -125,12 +125,28 @@ def _migrate_from_json():
                     auth = json.load(f)
                 username = auth.get("username", "admin")
                 must_change = int(auth.get("must_change", True))
+                existing_hash = auth.get("password_hash")
+                if existing_hash:
+                    # Preserve the account's real credential from the old JSON store.
+                    password_hash = existing_hash
+                else:
+                    # No hash to carry over — mint a random one-time password rather
+                    # than a hardcoded, guessable default, and force a change on login.
+                    temp_password = secrets.token_urlsafe(12)
+                    password_hash = generate_password_hash(temp_password)
+                    must_change = 1
+                    logger.warning(
+                        f"Migrated auth.json → SQLite. No password hash found; "
+                        f"temporary password for '{username}' is: {temp_password} "
+                        f"(you will be required to change it on first login)"
+                    )
                 conn.execute(
                     "INSERT INTO users (username, password_hash, must_change) VALUES (?, ?, ?)",
-                    (username, generate_password_hash("watchmon"), must_change)
+                    (username, password_hash, must_change)
                 )
                 conn.commit()
-                logger.info("Migrated auth.json → SQLite (password remains 'erasarr', please change)")
+                if existing_hash:
+                    logger.info("Migrated auth.json → SQLite (existing password preserved)")
 
 init_db()
 

@@ -509,7 +509,7 @@ class ErasarrMonitor:
         if not delay_days:
             return True
         try:
-            # Normalise to a naive UTC datetime for comparison with datetime.now()
+            # Normalise to a naive UTC datetime for comparison with datetime.utcnow()
             normalised = watched_at_str.strip()
             if normalised.endswith("Z"):
                 normalised = normalised[:-1]  # strip Z → naive UTC
@@ -518,7 +518,9 @@ class ErasarrMonitor:
                 import re as _re_tz
                 normalised = _re_tz.sub(r'[+-]\d{2}:\d{2}$', '', normalised)
             watched_at = datetime.fromisoformat(normalised)
-            return datetime.now() >= watched_at + timedelta(days=delay_days)
+            # watched_at is UTC (Emby/Jellyfin always report UTC) — compare against
+            # utcnow(), not now(), or the delay skews by the host's UTC offset.
+            return datetime.utcnow() >= watched_at + timedelta(days=delay_days)
         except Exception:
             return True
 
@@ -641,6 +643,11 @@ class ErasarrMonitor:
             content_type = rule.get("content_type", "all")
             precondition_tag = rule.get("precondition_tag", "")
             rule_actions = rule.get("actions") or {}
+            if rule_actions.get("delete_file") and not rule_actions.get("unmonitor"):
+                # Deleting a file while leaving the item monitored just makes Radarr/
+                # Sonarr re-grab it. Force unmonitor along with delete_file everywhere
+                # actions are applied (covers UI-created rules and imported configs).
+                rule_actions = {**rule_actions, "unmonitor": True}
             delay_days = int(rule_actions.get("delay_days") or 0)
             keep_last = int(rule_actions.get("keep_last_episodes") or 0)
             keep_last_by_time = bool(rule_actions.get("keep_last_by_watch_time", False))
@@ -651,8 +658,18 @@ class ErasarrMonitor:
             # are gated by the per-season required_user_keys check.
             force_delete_older = bool(rule_actions.get("force_delete_older_if_newer_watched", False))
             # Users that must have watched an episode before it can be processed.
-            # If the rule applies to specific users, use those; otherwise use everyone.
-            required_user_keys = applies_to_users if applies_to_users else all_user_keys
+            # If the rule applies to specific users, use those; otherwise use everyone
+            # covered by the rule's server scope (not literally every user on every
+            # configured server, which would make require_all_watched unsatisfiable
+            # once a rule is restricted to a subset of servers).
+            if applies_to_users:
+                required_user_keys = applies_to_users
+            elif applies_to_servers:
+                required_user_keys = {
+                    uk for uk in all_user_keys if uk.split(":", 1)[0] in applies_to_servers
+                }
+            else:
+                required_user_keys = all_user_keys
 
             # Filter items for this rule
             rule_watched = []
@@ -1010,7 +1027,7 @@ class ErasarrMonitor:
                                             continue
                                         if _ep_impl.get("episodeFileId", 0) == 0:
                                             continue
-                                        _ep_key_i = f"{rule_id}:ep:{sonarr_tvdb_id}:S{_s_i:02d}E{_e_i:02d}"
+                                        _ep_key_i = f"{rule_id}:ep:{sid}:{sonarr_tvdb_id}:S{_s_i:02d}E{_e_i:02d}"
                                         if self.state.is_processed(_ep_key_i):
                                             continue
                                         if keep_last > 0 and (_s_i, _e_i) in this_protected:
@@ -1023,7 +1040,7 @@ class ErasarrMonitor:
                                 would_waiting_users: set = set()
                                 already_done = 0
                                 for (s, e), ep_item in unique_eps.items():
-                                    ep_key = f"{rule_id}:ep:{sonarr_tvdb_id}:S{s:02d}E{e:02d}"
+                                    ep_key = f"{rule_id}:ep:{sid}:{sonarr_tvdb_id}:S{s:02d}E{e:02d}"
                                     if self.state.is_processed(ep_key):
                                         already_done += 1
                                         continue
@@ -1076,7 +1093,7 @@ class ErasarrMonitor:
                                 for (s, e) in would_act | would_pending | would_act_implicit:
                                     ep_item = unique_eps.get((s, e), {})
                                     self.state.add_dry_run_preview(
-                                        f"{rule_id}:ep:{sonarr_tvdb_id}:S{s:02d}E{e:02d}",
+                                        f"{rule_id}:ep:{sid}:{sonarr_tvdb_id}:S{s:02d}E{e:02d}",
                                         {"title": f"{series_name} S{s:02d}E{e:02d}",
                                          "type": "episode",
                                          "watched_at": ep_item.get("watched_at", ""),
@@ -1166,9 +1183,10 @@ class ErasarrMonitor:
 
                         show_title = item.get("series_name") or series["title"]
                         ep_label = f"{show_title} S{season:02d}E{episode_num:02d}"
-                        # Track per-series watermark for force_delete_older feature.
-                        # user_maxes tracks each user's personal maximum episode so we can
-                        # take the min-of-maxes as the safe watermark for multi-user rules.
+                        # Track per-series, per-season watermark for force_delete_older.
+                        # user_season_maxes: {season -> {user_key -> max episode watched
+                        # in that season}} — matches what the implicit-older-episode pass
+                        # below reads to compute each season's safe watermark.
                         if force_delete_older:
                             _inst_key = (sid, series["id"])
                             _user_key_item = item.get("_user_key", "")
@@ -1177,16 +1195,20 @@ class ErasarrMonitor:
                                 series_watermarks_map[_inst_key] = {
                                     "sonarr": sonarr, "series": series,
                                     "tvdb_id": tvdb_id, "show_title": show_title,
-                                    "user_maxes": {_user_key_item: (season, episode_num)},
+                                    "user_season_maxes": {season: {_user_key_item: episode_num}},
                                     "watched_se": {(season, episode_num)},
                                     "sid": sid,
                                 }
                             else:
                                 _wm["watched_se"].add((season, episode_num))
-                                _cur_max = _wm["user_maxes"].get(_user_key_item, (0, 0))
-                                if (season, episode_num) > _cur_max:
-                                    _wm["user_maxes"][_user_key_item] = (season, episode_num)
-                        key = f"{rule_id}:ep:{tvdb_id}:S{season:02d}E{episode_num:02d}"
+                                _season_maxes = _wm["user_season_maxes"].setdefault(season, {})
+                                if episode_num > _season_maxes.get(_user_key_item, 0):
+                                    _season_maxes[_user_key_item] = episode_num
+                        # Scope the key to this Sonarr instance: with paired SD/4K
+                        # instances the same episode exists independently in each one,
+                        # so processing it in instance A must not mark instance B's
+                        # copy as done too.
+                        key = f"{rule_id}:ep:{sid}:{tvdb_id}:S{season:02d}E{episode_num:02d}"
                         if self.state.is_processed(key):
                             continue
 
@@ -1331,7 +1353,7 @@ class ErasarrMonitor:
                             if _ep_data.get("episodeFileId", 0) == 0:
                                 continue
                             _ep_label = f"{_show_title} S{_s:02d}E{_e:02d}"
-                            _key = f"{rule_id}:ep:{_tvdb_id}:S{_s:02d}E{_e:02d}"
+                            _key = f"{rule_id}:ep:{_inst_sid}:{_tvdb_id}:S{_s:02d}E{_e:02d}"
                             if self.state.is_processed(_key):
                                 continue
                             if keep_last > 0:
