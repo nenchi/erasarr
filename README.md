@@ -10,26 +10,38 @@ No Trakt.tv required. Reads watch history directly from your media server.
 
 1. Connects to your **Emby** or **Jellyfin** server(s)
 2. Checks which movies/episodes specific users have watched
-3. Finds those items in **Radarr** (movies) and/or **Sonarr** (TV shows) — multiple instances of each supported
+3. Finds those items in **Radarr** (movies) and/or **Sonarr** (TV shows)
 4. Optionally applies a **precondition tag** — only process items you've tagged
 5. Takes configurable **actions** per rule: unmonitor, delete file, add tag
 6. Respects a **delay** — wait N days after watching before acting
-7. Supports **Require All Users Watched** — waits until every selected user has watched before acting
-8. Runs on a **schedule** you define, or manually via the web UI
+7. Runs on a **schedule** you define, or manually via the web UI
 
 ---
 
-## Quick Start (Docker — recommended)
+## Quick Start (prebuilt image — no build step)
+
+Skip cloning the repo and building locally — pull the published image straight from GHCR:
 
 ```bash
-git clone https://github.com/nenchi/erasarr.git
-cd erasarr
-docker compose up -d
+docker run -d \
+  --name erasarr \
+  -p 5000:5000 \
+  -v ./data:/data \
+  ghcr.io/nenchi/erasarr:latest
 ```
 
-Open **http://localhost:5000** in your browser.
+Or in your own `docker-compose.yml`, use `image:` instead of `build: .`:
 
-On first boot you'll be prompted to **create an account** — choose any username and password you like.
+```yaml
+services:
+  erasarr:
+    image: ghcr.io/nenchi/erasarr:latest
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+```
 
 ---
 
@@ -87,11 +99,11 @@ Leave the precondition tag **empty** to process all watched items.
 |--------|-------------|
 | **Unmonitor** | Tells Radarr/Sonarr to stop looking for upgrades |
 | **Delete File** | Deletes the media file from disk (⚠ irreversible!) |
-| **Delete from Emby/Jellyfin** | Removes **episodes not in Sonarr** via the media server API. Only active when Precondition Tag is blank. Does not apply to movies. |
+| **Delete from Emby/Jellyfin** | Removes items not in Sonarr/Radarr via the media server API |
 | **Add Tag** | Adds a tag to the movie/show (e.g. `processed`) |
 | **Delay** | Waits N days after watched before doing anything |
-| **Keep Last N Episodes** | Protects the N most recent episodes per show from deletion (episodes only, per series) |
-| **Require All Users Watched** | Only acts when every user covered by the rule has watched the item (movies + episodes) |
+| **Keep Last N Episodes** | Protects the N most recent episodes per show from deletion |
+| **Require All Users Watched** | Only acts when every user covered by the rule has watched the item |
 
 You can combine any of these. A common setup:
 - Unmonitor ✓, Delete File ✓, Delay = 7 days
@@ -99,27 +111,10 @@ You can combine any of these. A common setup:
 
 ---
 
-## Multiple Sonarr / Radarr Instances
+## Multiple Sonarr Instances
 
-You can add multiple Sonarr **and** Radarr instances (e.g. SD + 4K libraries).
-Erasarr will check all instances of each type for every watched item — the first instance that contains the item wins.
-
----
-
-## Backup & Restore
-
-You can export and import your entire configuration (servers, Arr apps, rules, schedule) from the sidebar in the web UI:
-
-- **⬇ Export config** — downloads `erasarr-config.json`
-- **⬆ Import config** — uploads a previously exported JSON and applies it immediately
-
-This is useful for migrating between servers or keeping a configuration backup.
-
----
-
-## Dark / Light Mode
-
-The UI supports both dark (default) and light themes. Toggle with the ☀️/🌙 button in the top-right corner of every page. Your preference is saved in the browser.
+You can add multiple Sonarr instances (e.g. Sonarr SD + Sonarr 4K).
+Erasarr will check all of them for each watched episode.
 
 ---
 
@@ -214,20 +209,3 @@ Add SSL via Let's Encrypt / Certbot.
 **Want to reprocess something?**
 - Clear state from the Dashboard (resets all tracking)
 - Or manually edit `data/state.json`
-
----
-
-## Disclaimer
-
-This tool is provided **as-is**, for personal use only, as an automation utility.
-
-- The author(s) take **no responsibility** for any data loss, deleted files, or unintended consequences resulting from the use of this software.
-- **You are solely responsible** for how you configure and run this tool on your own systems.
-- This project does **not** download, distribute, or interact with copyrighted content in any way — it only manages metadata and local files you already own and store on your own infrastructure.
-- Use this software **at your own risk**. Always test with a **Dry Run** before enabling live deletions.
-
----
-
-## License
-
-MIT — free to use, modify, fork, and distribute. See [LICENSE](LICENSE) for the full text.
