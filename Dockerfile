@@ -1,3 +1,7 @@
+# syntax=docker/dockerfile:1
+# check=skip=JSONArgsRecommended
+# ^ CMD below is shell-form on purpose, to expand $PORT — but it uses `exec`,
+# which replaces the shell as PID 1, so signal handling is fine despite the lint.
 FROM python:3.14-slim
 
 WORKDIR /app
