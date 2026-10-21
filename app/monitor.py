@@ -32,10 +32,11 @@ class EmbyClient:
         self.api_key = api_key
         self.name = name
 
+    def _auth_headers(self) -> dict:
+        return {"X-Emby-Token": self.api_key}
+
     def _get(self, path: str, params: dict = None):
-        params = params or {}
-        params["api_key"] = self.api_key
-        r = requests.get(f"{self.address}{path}", params=params, timeout=15)
+        r = requests.get(f"{self.address}{path}", params=params, headers=self._auth_headers(), timeout=15)
         r.raise_for_status()
         return r.json()
 
@@ -141,7 +142,8 @@ class EmbyClient:
         """Delete an item and its media file directly from the server."""
         r = requests.delete(
             f"{self.address}/Items/{item_id}",
-            params={"api_key": self.api_key, "deleteMedia": "true"},
+            params={"deleteMedia": "true"},
+            headers=self._auth_headers(),
             timeout=15,
         )
         return r
@@ -149,6 +151,10 @@ class EmbyClient:
 
 class JellyfinClient(EmbyClient):
     """Jellyfin uses the same API as Emby with minor differences."""
+
+    def _auth_headers(self) -> dict:
+        # Jellyfin 10.12 disables legacy auth (api_key query, X-Emby-Token) by default
+        return {"Authorization": f'MediaBrowser Token="{self.api_key}"'}
 
     def test_connection(self):
         try:
