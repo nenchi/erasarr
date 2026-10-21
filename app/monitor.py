@@ -153,7 +153,7 @@ class JellyfinClient(EmbyClient):
     """Jellyfin uses the same API as Emby with minor differences."""
 
     def _auth_headers(self) -> dict:
-        # Jellyfin 10.12 disables legacy auth (api_key query, X-Emby-Token) by default
+        # Jellyfin 12 disables legacy auth (api_key query, X-Emby-Token) by default
         return {"Authorization": f'MediaBrowser Token="{self.api_key}"'}
 
     def test_connection(self):
