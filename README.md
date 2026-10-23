@@ -175,6 +175,33 @@ erasarr/
 
 ---
 
+## Tests and releases
+
+`tests/smoke_test.py` (standard library only) runs the app end to end against fake Jellyfin and Radarr servers:
+first-user registration, login/logout, every page, config import/export, a dry run (changes nothing) and a live run
+(the watched movie gets unmonitored and its file deleted), and that Jellyfin is only called with the
+`Authorization` header.
+
+```bash
+pip install -r app/requirements.txt
+(cd app && DATA_DIR=/tmp/erasarr-test python app.py) &
+python3 tests/smoke_test.py http://127.0.0.1:5000
+```
+
+CI (`.github/workflows/docker-publish.yml`) builds the image and runs that test against the container on every pull
+request and push. Only when it passes does it publish `ghcr.io/nenchi/erasarr`: `latest` on pushes to main,
+`x.y.z` + `latest` on a `vx.y.z` tag.
+
+**Dependencies are pinned** (`app/requirements.txt`, the Python image in the `Dockerfile`). Renovate opens a PR
+for each update and the test runs on it. **Patch updates** (Python 3.14.9 → 3.14.10, flask 3.1.3 → 3.1.4) are
+merged by Renovate once the test is green, and the merge makes an **automatic patch release** (1.1.2 → 1.1.3) with
+notes like "Bump flask 3.1.3 → 3.1.4". **Minor and major updates** stay a PR to merge by hand.
+
+**Manual release:** bump `APP_VERSION` in `app/app.py`, commit, tag `vX.Y.Z` (CI checks that the tag matches) and
+push the tag.
+
+---
+
 ## Reverse Proxy (Nginx example)
 
 ```nginx

@@ -364,7 +364,7 @@ except Exception as e:
 @app.before_request
 def check_setup():
     """Redirect to registration if no users exist yet."""
-    if request.endpoint in ("register", "static") or not request.endpoint:
+    if request.endpoint in ("register", "static", "health") or not request.endpoint:  # health: answer before setup too
         return
     if user_count() == 0:
         return redirect(url_for("register"))

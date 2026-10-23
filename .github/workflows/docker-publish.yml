@@ -1,9 +1,10 @@
-name: Build and publish Docker image
+name: Test, build and publish Docker image
 
 on:
   push:
     branches: [main]
     tags: ["v*"]
+  pull_request:          # Renovate PRs: tests only, nothing published
   workflow_dispatch:
 
 env:
@@ -11,15 +12,89 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Release tag matches APP_VERSION
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v=$(sed -n 's/^APP_VERSION = "\(.*\)".*/\1/p' app/app.py)
+          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "::error::tag $GITHUB_REF_NAME but app/app.py says $v"; exit 1; }
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build test image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: erasarr:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # host network: the container reaches the test's fake Jellyfin/Radarr on 127.0.0.1
+      - name: End-to-end test the container
+        run: |
+          docker run -d --name erasarr --network host -e PORT=5000 erasarr:test
+          python3 tests/smoke_test.py http://127.0.0.1:5000
+
+      - name: Container log
+        if: always()
+        run: docker logs erasarr || true
+
+  # A Renovate merge that changed the base image or app/requirements.txt → next patch release.
+  # Renovate merges only after the test job passed on its PR (renovate.json), and test ran again above.
+  release:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor == 'renovate[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Bump version if the image or requirements changed
+        id: bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          sh .github/scripts/auto-release.sh
+
+      - name: Push release commit + tag, create GitHub Release
+        if: steps.bump.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.bump.outputs.version }}
+        run: |
+          git push origin HEAD:main "v$V"
+          gh release create "v$V" --title "v$V" --notes-file release-notes.md
+
   build-and-push:
+    needs: [test, release]
+    # release is skipped on normal pushes and tags; publishing still runs then
+    if: always() && needs.test.result == 'success' && github.event_name != 'pull_request' && needs.release.result != 'failure'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
+      # a push by github.token starts no new workflow run, so an automatic release is built here, from its tag
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.version && format('v{0}', needs.release.outputs.version) || github.ref }}
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -33,10 +108,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # latest applies to every build this workflow triggers on (main pushes
-          # and v* tag pushes), so a release tag also moves `latest` forward.
+          # latest applies to every build this workflow publishes (main pushes, v* tags and automatic
+          # releases), so a release also moves `latest` forward.
           tags: |
             type=semver,pattern={{version}}
+            type=raw,value=${{ needs.release.outputs.version }},enable=${{ needs.release.outputs.version != '' }}
             type=raw,value=latest
 
       - name: Set up Docker Buildx
