@@ -193,9 +193,10 @@ request and push. Only when it passes does it publish `ghcr.io/nenchi/erasarr`: 
 `x.y.z` + `latest` on a `vx.y.z` tag.
 
 **Dependencies are pinned** (`app/requirements.txt`, the Python image in the `Dockerfile`). Renovate opens a PR
-for each update and the test runs on it. **Patch updates** (Python 3.14.9 → 3.14.10, flask 3.1.3 → 3.1.4) are
-merged by Renovate once the test is green, and the merge makes an **automatic patch release** (1.1.2 → 1.1.3) with
-notes like "Bump flask 3.1.3 → 3.1.4". **Minor and major updates** stay a PR to merge by hand.
+for each update and the test runs on it. **Minor and patch updates of the pip packages** (flask 3.1.3 → 3.2.0) and
+**Python patch updates** (3.14.9 → 3.14.10) are merged by Renovate once the test is green, and the merge makes an
+**automatic patch release** (1.1.3 → 1.1.4) with notes like "Bump flask 3.1.3 → 3.2.0". **Major updates** and a new
+**Python minor** version (3.14 → 3.15) stay a PR to merge by hand.
 
 **Manual release:** bump `APP_VERSION` in `app/app.py`, commit, tag `vX.Y.Z` (CI checks that the tag matches) and
 push the tag.
