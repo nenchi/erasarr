@@ -258,10 +258,16 @@ class RadarrClient:
     def get_tags(self):
         return self._get("/tag")
 
-    def ensure_tag(self, label: str) -> int:
+    def find_tag(self, label: str):
         for tag in self.get_tags():
             if tag["label"].lower() == label.lower():
                 return tag["id"]
+        return None
+
+    def ensure_tag(self, label: str) -> int:
+        tag_id = self.find_tag(label)
+        if tag_id is not None:
+            return tag_id
         r = requests.post(
             f"{self.address}/api/v3/tag?apikey={self.api_key}",
             json={"id": 0, "label": label}, timeout=15
@@ -333,10 +339,16 @@ class SonarrClient:
     def get_tags(self):
         return self._get("/tag")
 
-    def ensure_tag(self, label: str) -> int:
+    def find_tag(self, label: str):
         for tag in self.get_tags():
             if tag["label"].lower() == label.lower():
                 return tag["id"]
+        return None
+
+    def ensure_tag(self, label: str) -> int:
+        tag_id = self.find_tag(label)
+        if tag_id is not None:
+            return tag_id
         r = requests.post(
             f"{self.address}/api/v3/tag?apikey={self.api_key}",
             json={"id": 0, "label": label}, timeout=15
@@ -471,6 +483,21 @@ class StateTracker:
 # ─────────────────────────────────────────────
 #  Main Monitor
 # ─────────────────────────────────────────────
+
+# matches no item: a precondition tag that doesn't exist (or couldn't be looked up) must select nothing, never everything
+NO_ITEM_TAG = -1
+
+
+def precondition_tag_id(client, label):
+    """id of a rule's precondition tag, never created (a new tag is on no item anyway); None = rule has none"""
+    if not label:
+        return None
+    try:
+        tag_id = client.find_tag(label)
+    except Exception:
+        return NO_ITEM_TAG
+    return NO_ITEM_TAG if tag_id is None else tag_id
+
 
 class ErasarrMonitor:
     def __init__(self, config: dict, state_file: str = "/data/state.json"):
@@ -694,12 +721,9 @@ class ErasarrMonitor:
             radarr_tag_ids = {}  # instance_id -> (precond_tag_id, action_tag_id)
             for cfg_r, radarr_client in radarr_instances_list:
                 rid = cfg_r["id"]
-                try:
-                    precond_id_r = radarr_client.ensure_tag(precondition_tag) if precondition_tag else None
-                except Exception:
-                    precond_id_r = None
-                try:
-                    action_tag_id_r = radarr_client.ensure_tag(rule_actions["add_tag"]) if rule_actions.get("add_tag") else None
+                precond_id_r = precondition_tag_id(radarr_client, precondition_tag)
+                try:  # created only by a live run: a dry run must not change anything
+                    action_tag_id_r = radarr_client.ensure_tag(rule_actions["add_tag"]) if rule_actions.get("add_tag") and not dry_run else None
                 except Exception:
                     action_tag_id_r = None
                 radarr_tag_ids[rid] = (precond_id_r, action_tag_id_r)
@@ -708,12 +732,9 @@ class ErasarrMonitor:
             sonarr_tag_ids = {}
             for cfg_s, sonarr in sonarr_instances:
                 sid = cfg_s["id"]
-                try:
-                    precond_id = sonarr.ensure_tag(precondition_tag) if precondition_tag else None
-                except Exception:
-                    precond_id = None
-                try:
-                    action_tag_id = sonarr.ensure_tag(rule_actions["add_tag"]) if rule_actions.get("add_tag") else None
+                precond_id = precondition_tag_id(sonarr, precondition_tag)
+                try:  # created only by a live run: a dry run must not change anything
+                    action_tag_id = sonarr.ensure_tag(rule_actions["add_tag"]) if rule_actions.get("add_tag") and not dry_run else None
                 except Exception:
                     action_tag_id = None
                 sonarr_tag_ids[sid] = (precond_id, action_tag_id)

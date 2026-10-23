@@ -177,19 +177,25 @@ erasarr/
 
 ## Tests and releases
 
-`tests/smoke_test.py` (standard library only) runs the app end to end against fake Jellyfin and Radarr servers:
-first-user registration, login/logout, every page, config import/export, a dry run (changes nothing) and a live run
-(the watched movie gets unmonitored and its file deleted), and that Jellyfin is only called with the
-`Authorization` header.
+`tests/smoke_test.py` (standard library only) runs the app end to end against fake Jellyfin, Emby, Radarr and
+Sonarr servers:
+
+- web UI: first-user registration, login/logout, every page, config import/export
+- a dry run changes nothing; then a live run with three rules:
+  - movies (Jellyfin and Emby users): unmonitored, tagged, file deleted; a movie watched just now waits for the delay
+  - episodes with *keep last 2*: only the older watched files are deleted, unwatched episodes stay
+  - episodes with a precondition tag: only the tagged show is touched, also when Sonarr's tag API is down
+- a second run changes nothing; Jellyfin gets only the `Authorization` header, Emby only `X-Emby-Token`
+- the CLI (`cli.py --dry-run`, a live run, a missing database) on the same data
 
 ```bash
 pip install -r app/requirements.txt
 (cd app && DATA_DIR=/tmp/erasarr-test python app.py) &
-python3 tests/smoke_test.py http://127.0.0.1:5000
+CLI="python app/cli.py --data /tmp/erasarr-test" python3 tests/smoke_test.py http://127.0.0.1:5000
 ```
 
 CI (`.github/workflows/docker-publish.yml`) builds the image and runs that test against the container on every pull
-request and push. Only when it passes does it publish `ghcr.io/nenchi/erasarr`: `latest` on pushes to main,
+request and push, on `ubuntu-latest` and `ubuntu-26.04`. Only when it passes does it publish `ghcr.io/nenchi/erasarr`: `latest` on pushes to main,
 `x.y.z` + `latest` on a `vx.y.z` tag.
 
 **Dependencies are pinned** (`app/requirements.txt`, the Python image in the `Dockerfile`). Renovate opens a PR
