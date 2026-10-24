@@ -5,15 +5,21 @@
   "platformAutomerge": false,
   "packageRules": [
     {
+      "description": "Python: patch PR (3.14.9 → 3.14.x: automerged, automatic release) kept apart from the minor PR (→ 3.15: by hand); without this Renovate only offers the newest minor",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["python"],
+      "separateMinorPatch": true
+    },
+    {
       "description": "pip packages minor/patch (flask 3.1.3 → 3.2.0): Renovate merges once the end-to-end test is green; the merge makes an automatic patch release",
       "matchManagers": ["pip_requirements"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
     },
     {
-      "description": "Python image patch (3.14.9 → 3.14.10): merged once the test is green, automatic patch release",
+      "description": "Python image patch (3.14.9 → 3.14.10) and digest updates (same tag rebuilt with Debian fixes): merged once the test is green, automatic patch release",
       "matchManagers": ["dockerfile"],
-      "matchUpdateTypes": ["patch"],
+      "matchUpdateTypes": ["patch", "digest"],
       "automerge": true
     },
     {

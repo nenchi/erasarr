@@ -2,7 +2,8 @@
 # check=skip=JSONArgsRecommended
 # ^ CMD below is shell-form on purpose, to expand $PORT — but it uses `exec`,
 # which replaces the shell as PID 1, so signal handling is fine despite the lint.
-FROM python:3.14.9-slim
+# Pinned by digest: Renovate also picks up rebuilds of the same tag (Debian security fixes), each an automatic patch release
+FROM python:3.14.9-slim@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8
 
 WORKDIR /app
 

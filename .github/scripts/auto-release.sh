@@ -13,6 +13,7 @@ old_from=$(git show HEAD~1:Dockerfile | sed -n 's/^FROM //p')
 new_from=$(sed -n 's/^FROM //p' Dockerfile)
 if [ "$old_from" != "$new_from" ]; then
   case "$new_from" in
+    "${old_from%@*}"@*) add "Rebuilt base image \`${new_from%@*}\` (new digest \`${new_from#*@}\`, Debian package fixes)" ;;
     python:*) o=${old_from#python:}; n=${new_from#python:}; add "Bump Python ${o%%-*} → ${n%%-*} (base image \`$old_from\` → \`$new_from\`)" ;;
     *) add "Bump base image \`$old_from\` → \`$new_from\`" ;;
   esac
