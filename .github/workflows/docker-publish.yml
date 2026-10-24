@@ -59,7 +59,8 @@ jobs:
   # Renovate merges only after the test job passed on its PR (renovate.json), and test ran again above.
   release:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor == 'renovate[bot]'
+    # any push to main: a Renovate PR merged by Renovate or by hand; auto-release.sh releases only if deps changed
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
