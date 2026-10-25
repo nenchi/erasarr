@@ -3,6 +3,7 @@
   "extends": ["config:recommended"],
   "labels": ["dependencies"],
   "platformAutomerge": false,
+  "dependencyDashboard": false,
   "packageRules": [
     {
       "description": "Python: patch PR (3.14.9 → 3.14.x: automerged, automatic release) kept apart from the minor PR (→ 3.15: by hand); without this Renovate only offers the newest minor",
