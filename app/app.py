@@ -32,7 +32,7 @@ logger = logging.getLogger("erasarr.web")
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 DB_FILE = os.path.join(DATA_DIR, "erasarr.db")
 STATE_FILE = os.path.join(DATA_DIR, "state.json")
-APP_VERSION = "1.1.5"
+APP_VERSION = "1.1.6"
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
