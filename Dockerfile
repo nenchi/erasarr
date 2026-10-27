@@ -3,7 +3,7 @@
 # ^ CMD below is shell-form on purpose, to expand $PORT — but it uses `exec`,
 # which replaces the shell as PID 1, so signal handling is fine despite the lint.
 # Pinned by digest: Renovate also picks up rebuilds of the same tag (Debian security fixes), each an automatic patch release
-FROM python:3.15.1-slim@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51
+FROM python:3.15.2-slim@sha256:197f6622a70b727a4e61bdac13a73b4e2b914b896aa5a729ceb1f45a09bde5fa
 
 WORKDIR /app
 
