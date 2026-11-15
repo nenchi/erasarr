@@ -97,8 +97,9 @@ Leave the precondition tag **empty** to process all watched items.
 
 | Action | What happens |
 |--------|-------------|
-| **Unmonitor** | Tells Radarr/Sonarr to stop looking for upgrades. A Sonarr season is unmonitored too once none of its episodes are monitored any more (also seasons finished before 1.2.0, on the next run, even if their files were deleted) |
-| **Force Unmonitor Season** | Unmonitors a Sonarr season as soon as its last episode is watched, even if earlier episodes were skipped |
+| **Unmonitor** | Tells Radarr/Sonarr to stop looking for upgrades |
+| **Unmonitor Season** | Off by default. Unmonitors a Sonarr season once none of its episodes are monitored any more, including seasons finished earlier (also when their files were deleted). The newest season of a show Sonarr marks as *continuing* is never unmonitored: Sonarr would add its upcoming episodes as unmonitored |
+| **↳ Force When Last Episode Watched** | Sub-option: unmonitors the season as soon as its last episode is watched, even if earlier episodes were skipped |
 | **Delete File** | Deletes the media file from disk (⚠ irreversible!) |
 | **Delete from Emby/Jellyfin** | Removes items not in Sonarr/Radarr via the media server API |
 | **Add Tag** | Adds a tag to the movie/show (e.g. `processed`) |
@@ -186,7 +187,7 @@ Sonarr servers:
   - movies (Jellyfin and Emby users): unmonitored, tagged, file deleted; a movie watched just now waits for the delay
   - episodes with *keep last 2*: only the older watched files are deleted, unwatched episodes stay
   - episodes with a precondition tag: only the tagged show is touched, also when Sonarr's tag API is down
-  - seasons: unmonitored once no episode is monitored; with *force unmonitor season* as soon as the last episode is watched
+  - seasons: only with *Unmonitor Season* on, once no episode is monitored; with *force* as soon as the last episode is watched
 - a second run changes nothing; Jellyfin gets only the `Authorization` header, Emby only `X-Emby-Token`
 - the CLI (`cli.py --dry-run`, a live run, a missing database) on the same data
 
