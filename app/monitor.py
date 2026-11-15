@@ -5,6 +5,7 @@ Connects Emby/Jellyfin watch history to Sonarr/Radarr actions
 """
 
 import os
+import re
 import json
 import logging
 import requests
@@ -1267,10 +1268,6 @@ class ErasarrMonitor:
                         # copy as done too.
                         key = f"{rule_id}:ep:{sid}:{tvdb_id}:S{season:02d}E{episode_num:02d}"
                         if self.state.is_processed(key):
-                            # Still check its season: episodes unmonitored before season
-                            # unmonitor existed (< 1.2.0) are never processed again.
-                            if not dry_run and rule_actions.get("unmonitor"):
-                                _touch(sid, sonarr, series, season, episode_num)
                             continue
 
                         if not dry_run:
@@ -1455,6 +1452,29 @@ class ErasarrMonitor:
                                     })
                             except Exception as _err2:
                                 self._log(f"      ✗ Failed: {_ep_label}: {_err2}", "error")
+
+                # ── Season backfill: episodes processed in earlier runs (e.g. before 1.2.0) ──
+                # Their files may be deleted, so the media server no longer lists them;
+                # erasarr's own processed keys still name show + season. Seasons already
+                # off are skipped by _touch without a request.
+                # ponytail: scans all processed keys each run; fine for thousands of keys.
+                if not dry_run and rule_actions.get("unmonitor"):
+                    # rule:ep:<sid>:<tvdb>:S01E03, or rule:ep:<tvdb>:S01E03 (before per-instance keys)
+                    _key_re = re.compile(rf"^{re.escape(rule_id)}:ep:(?:([^:]+):)?(\d+):S(\d+)E(\d+)$")
+                    _clients = {c["id"]: cl for c, cl in sonarr_instances}
+                    _by_tvdb = {_sid: {x.get("tvdbId"): x for x in lst} for _sid, lst in sonarr_series_caches.items()}
+                    for _k in list(self.state.state.get("processed", {})):
+                        _m = _key_re.match(_k)
+                        if not _m:
+                            continue
+                        for _sid in ([_m[1]] if _m[1] else list(_clients)):
+                            _ser = _by_tvdb.get(_sid, {}).get(int(_m[2]))
+                            if not _ser or _sid not in _clients:
+                                continue
+                            _pre = sonarr_tag_ids.get(_sid, (None, None))[0]
+                            if _pre is not None and not _clients[_sid].series_has_tag(_ser, _pre):
+                                continue
+                            _touch(_sid, _clients[_sid], _ser, int(_m[3]), int(_m[4]))
 
                 # ── Season unmonitor: last monitored episode of a season was just unmonitored ──
                 _force_season = bool(rule_actions.get("force_unmonitor_season", False))

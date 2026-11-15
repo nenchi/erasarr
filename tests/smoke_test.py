@@ -11,7 +11,7 @@ Monitor, one dry run (changes nothing) then a live run:
   - episodes (Jellyfin only): keep the last 2 watched, so only older files are deleted; unwatched ones untouched
   - episodes (Emby only, precondition tag "cleanup"): only the tagged show is unmonitored
   - seasons: off once no episode is monitored; with force_unmonitor_season (tag "force-season") as soon as the last one is
-    (also for episodes processed in an earlier run, e.g. before 1.2.0)
+    (also for episodes processed in an earlier run, e.g. before 1.2.0, even if no longer on the media server)
   - a second run changes nothing; with Sonarr's tag API down the precondition rule acts on nothing (not everything)
   - Jellyfin only gets the Authorization header, Emby only X-Emby-Token
 CLI: cli.py --dry-run and a live run from the same database change nothing more.
@@ -348,11 +348,14 @@ def monitor(cfg):
     processed = json.loads(call("/api/state")[1]).get("processed", {})
     ok({"movies:movie:tt0133093", "movies:movie:tt1375666"} <= set(processed) and "movies:movie:tt1160419" not in processed,
        "processed: the two movies, not Dune")
-    sonarr_series[3]["seasons"][0]["monitored"] = True  # like before 1.2.0: episode done + unmonitored, season left on
+    # like before 1.2.0: Show C's episode done + unmonitored, season left on, and its file deleted
+    # so the media server no longer lists it → the season is found via erasarr's own state
+    sonarr_series[3]["seasons"][0]["monitored"] = True
+    bob_items[:] = [i for i in bob_items if i["Id"] != "c1"]
     n = len(writes)
     call("/run", {"dry_run": "0"})
     ok(not [w for w in writes[n:] if w[1] == "DELETE"] and radarr_movies[3]["monitored"], "second run: nothing deleted again, Dune still waits")
-    ok(not sonarr_series[3]["seasons"][0]["monitored"], "second run: Show C S01 (episode processed earlier, season still on) → season unmonitored")
+    ok(not sonarr_series[3]["seasons"][0]["monitored"], "second run: Show C S01 (processed earlier, gone from Emby, season still on) → season unmonitored")
 
     fail_sonarr_tags[0] = True
     call("/run", {"dry_run": "0"})

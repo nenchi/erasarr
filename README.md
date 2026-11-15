@@ -97,7 +97,7 @@ Leave the precondition tag **empty** to process all watched items.
 
 | Action | What happens |
 |--------|-------------|
-| **Unmonitor** | Tells Radarr/Sonarr to stop looking for upgrades. A Sonarr season is unmonitored too once none of its episodes are monitored any more (also seasons finished before 1.2.0, on the next run) |
+| **Unmonitor** | Tells Radarr/Sonarr to stop looking for upgrades. A Sonarr season is unmonitored too once none of its episodes are monitored any more (also seasons finished before 1.2.0, on the next run, even if their files were deleted) |
 | **Force Unmonitor Season** | Unmonitors a Sonarr season as soon as its last episode is watched, even if earlier episodes were skipped |
 | **Delete File** | Deletes the media file from disk (⚠ irreversible!) |
 | **Delete from Emby/Jellyfin** | Removes items not in Sonarr/Radarr via the media server API |
