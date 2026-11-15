@@ -389,6 +389,11 @@ class SonarrClient:
         elif any(ep.get("monitored") for ep in eps):
             return False
         series_data = self._get(f"/series/{series_id}")
+        # The newest season of a continuing show can still get episodes Sonarr does not
+        # list yet; unmonitored, Sonarr would add them unmonitored. Leave it on.
+        if series_data.get("status") == "continuing" and season >= max(
+                (x.get("seasonNumber", 0) for x in series_data.get("seasons", [])), default=0):
+            return False
         for s in series_data.get("seasons", []):
             if s.get("seasonNumber") == season and s.get("monitored"):
                 s["monitored"] = False
@@ -1200,6 +1205,10 @@ class ErasarrMonitor:
                 # this run — tag is show-level, no need to re-apply for every episode
                 tagged_series_this_run: set = set()
                 touched_seasons: dict = {}  # (sid, series_id, season) -> (SonarrClient, show title, highest ep unmonitored)
+                # Off by default: an unmonitored season makes Sonarr add newly announced
+                # episodes as unmonitored. force_unmonitor_season is its sub-option.
+                _force_season = bool(rule_actions.get("force_unmonitor_season", False))
+                _season_on = bool(rule_actions.get("unmonitor_season", False)) or _force_season
 
                 def _touch(sid, client, series, season, ep):
                     # Season already off in the cached series list → nothing to check, no request.
@@ -1458,7 +1467,7 @@ class ErasarrMonitor:
                 # erasarr's own processed keys still name show + season. Seasons already
                 # off are skipped by _touch without a request.
                 # ponytail: scans all processed keys each run; fine for thousands of keys.
-                if not dry_run and rule_actions.get("unmonitor"):
+                if _season_on and not dry_run and rule_actions.get("unmonitor"):
                     # rule:ep:<sid>:<tvdb>:S01E03, or rule:ep:<tvdb>:S01E03 (before per-instance keys)
                     _key_re = re.compile(rf"^{re.escape(rule_id)}:ep:(?:([^:]+):)?(\d+):S(\d+)E(\d+)$")
                     _clients = {c["id"]: cl for c, cl in sonarr_instances}
@@ -1477,8 +1486,7 @@ class ErasarrMonitor:
                             _touch(_sid, _clients[_sid], _ser, int(_m[3]), int(_m[4]))
 
                 # ── Season unmonitor: last monitored episode of a season was just unmonitored ──
-                _force_season = bool(rule_actions.get("force_unmonitor_season", False))
-                for (_, _ser_id, _s), (_sonarr, _title, _max_e) in touched_seasons.items():
+                for (_, _ser_id, _s), (_sonarr, _title, _max_e) in (touched_seasons.items() if _season_on else ()):
                     try:
                         if _sonarr.unmonitor_season_if_done(_ser_id, _s, _max_e if _force_season else 0):
                             _why = "last episode watched" if _force_season else "all episodes unmonitored"
