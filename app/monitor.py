@@ -1200,6 +1200,14 @@ class ErasarrMonitor:
                 tagged_series_this_run: set = set()
                 touched_seasons: dict = {}  # (sid, series_id, season) -> (SonarrClient, show title, highest ep unmonitored)
 
+                def _touch(sid, client, series, season, ep):
+                    # Season already off in the cached series list → nothing to check, no request.
+                    if any(x.get("seasonNumber") == season and not x.get("monitored")
+                           for x in series.get("seasons", [])):
+                        return
+                    prev = touched_seasons.get((sid, series["id"], season), (0, 0, 0))[2]
+                    touched_seasons[(sid, series["id"], season)] = (client, series["title"], max(prev, ep))
+
                 for item in rule_watched:
                     if item["type"] != "Episode":
                         continue
@@ -1259,6 +1267,10 @@ class ErasarrMonitor:
                         # copy as done too.
                         key = f"{rule_id}:ep:{sid}:{tvdb_id}:S{season:02d}E{episode_num:02d}"
                         if self.state.is_processed(key):
+                            # Still check its season: episodes unmonitored before season
+                            # unmonitor existed (< 1.2.0) are never processed again.
+                            if not dry_run and rule_actions.get("unmonitor"):
+                                _touch(sid, sonarr, series, season, episode_num)
                             continue
 
                         if not dry_run:
@@ -1333,8 +1345,7 @@ class ErasarrMonitor:
                                 if rule_actions.get("unmonitor"):
                                     sonarr.unmonitor_episode(ep_data)
                                     self._log("      ✓ Unmonitored")
-                                    _prev = touched_seasons.get((sid, series["id"], season), (0, 0, 0))[2]
-                                    touched_seasons[(sid, series["id"], season)] = (sonarr, series["title"], max(_prev, episode_num))
+                                    _touch(sid, sonarr, series, season, episode_num)
                                 if action_tag_id:
                                     _tag_key = (sid, series["id"])
                                     if _tag_key not in tagged_series_this_run:
@@ -1421,8 +1432,7 @@ class ErasarrMonitor:
                                 if rule_actions.get("unmonitor"):
                                     _sonarr.unmonitor_episode(_ep_data)
                                     self._log("      ✓ Unmonitored")
-                                    _prev = touched_seasons.get((_inst_sid, _ser_id, _s), (0, 0, 0))[2]
-                                    touched_seasons[(_inst_sid, _ser_id, _s)] = (_sonarr, _show_title, max(_prev, _e))
+                                    _touch(_inst_sid, _sonarr, _series, _s, _e)
                                 if _act_tag_id:
                                     _tk = (_inst_sid, _ser_id)
                                     if _tk not in tagged_series_this_run:
