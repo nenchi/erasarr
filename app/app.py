@@ -32,7 +32,7 @@ logger = logging.getLogger("erasarr.web")
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 DB_FILE = os.path.join(DATA_DIR, "erasarr.db")
 STATE_FILE = os.path.join(DATA_DIR, "state.json")
-APP_VERSION = "1.1.12"
+APP_VERSION = "1.2.0"
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -851,6 +851,7 @@ def _rule_from_request(data: dict, existing: dict = None) -> dict:
             "delay_days": int(data.get("delay_days") or 0),
             "keep_last_episodes": int(data.get("keep_last_episodes") or 0),
             "force_delete_older_if_newer_watched": bool(data.get("force_delete_older_if_newer_watched", False)),
+            "force_unmonitor_season": bool(data.get("force_unmonitor_season", False)),
         },
     }
 

@@ -10,6 +10,7 @@ Monitor, one dry run (changes nothing) then a live run:
   - movies (Jellyfin + Emby users): unmonitor, tag, delete file; a movie watched just now waits for the 7-day delay
   - episodes (Jellyfin only): keep the last 2 watched, so only older files are deleted; unwatched ones untouched
   - episodes (Emby only, precondition tag "cleanup"): only the tagged show is unmonitored
+  - seasons: off once no episode is monitored; with force_unmonitor_season (tag "force-season") as soon as the last one is
   - a second run changes nothing; with Sonarr's tag API down the precondition rule acts on nothing (not everything)
   - Jellyfin only gets the Authorization header, Emby only X-Emby-Token
 CLI: cli.py --dry-run and a live run from the same database change nothing more.
@@ -53,11 +54,13 @@ def episode(eid, series_id, s, e):
 
 radarr_movies = {1: movie(1, "The Matrix", "tt0133093"), 2: movie(2, "Inception", "tt1375666"), 3: movie(3, "Dune", "tt1160419")}
 radarr_tags = []
-sonarr_tags = [{"id": 7, "label": "cleanup"}]
-sonarr_series = {1: {"id": 1, "title": "Show A", "tvdbId": 100, "tags": []},
-                 2: {"id": 2, "title": "Show B", "tvdbId": 200, "tags": []},
-                 3: {"id": 3, "title": "Show C", "tvdbId": 300, "tags": [7]}}
-sonarr_episodes = {e["id"]: e for e in [episode(100 + n, 1, 1, n) for n in range(1, 6)] + [episode(201, 2, 1, 1), episode(301, 3, 1, 1)]}
+sonarr_tags = [{"id": 7, "label": "cleanup"}, {"id": 8, "label": "force-season"}]
+sonarr_series = {1: {"id": 1, "title": "Show A", "tvdbId": 100, "tags": [], "seasons": [{"seasonNumber": 1, "monitored": True}]},
+                 2: {"id": 2, "title": "Show B", "tvdbId": 200, "tags": [], "seasons": [{"seasonNumber": 1, "monitored": True}]},
+                 3: {"id": 3, "title": "Show C", "tvdbId": 300, "tags": [7], "seasons": [{"seasonNumber": 1, "monitored": True}]},
+                 4: {"id": 4, "title": "Show D", "tvdbId": 400, "tags": [8], "seasons": [{"seasonNumber": 1, "monitored": True}]}}
+sonarr_episodes = {e["id"]: e for e in [episode(100 + n, 1, 1, n) for n in range(1, 6)] + [episode(201, 2, 1, 1), episode(301, 3, 1, 1)]
+                   + [episode(400 + n, 4, 1, n) for n in range(1, 4)]}
 
 
 def watched_movie(iid, title, imdb, when):
@@ -70,7 +73,8 @@ def watched_episode(iid, show, tvdb, s, e):
 
 
 alice_items = [watched_movie("m1", "The Matrix", "tt0133093", OLD), watched_movie("m3", "Dune", "tt1160419", NOW)] + \
-              [watched_episode(f"a{n}", "Show A", 100, 1, n) for n in range(1, 5)]
+              [watched_episode(f"a{n}", "Show A", 100, 1, n) for n in range(1, 5)] + \
+              [watched_episode(f"d{n}", "Show D", 400, 1, n) for n in (1, 3)]  # E02 skipped
 bob_items = [watched_movie("m2", "Inception", "tt1375666", OLD),
              watched_episode("b1", "Show B", 200, 1, 1), watched_episode("c1", "Show C", 300, 1, 1)]
 
@@ -298,6 +302,8 @@ def config(jellyfin, emby, radarr, sonarr):
                  actions={"unmonitor": True, "delete_file": True, "keep_last_episodes": 2, "delay_days": 0}),
             rule("tagged", "Tagged shows only", content_type="episodes", applies_to_servers=["s2"], precondition_tag="cleanup",
                  actions={"unmonitor": True, "delete_file": False, "delay_days": 0}),
+            rule("force", "Force season unmonitor", content_type="episodes", applies_to_servers=["s1"], precondition_tag="force-season",
+                 actions={"unmonitor": True, "delete_file": False, "delay_days": 0, "force_unmonitor_season": True}),
         ],
         "schedule": {"mode": "manual"},
     }
@@ -305,9 +311,9 @@ def config(jellyfin, emby, radarr, sonarr):
 
 def monitor(cfg):
     code, body, _ = call("/api/import-config", files={"config_file": ("erasarr-config.json", json.dumps(cfg))})
-    ok(code == 200 and json.loads(body)["ok"], "import config (Jellyfin, Emby, Radarr, Sonarr, 3 rules)")
+    ok(code == 200 and json.loads(body)["ok"], "import config (Jellyfin, Emby, Radarr, Sonarr, 4 rules)")
     exported = json.loads(call("/api/export-config")[1])
-    ok([r["id"] for r in exported["action_rules"]] == ["movies", "keep2", "tagged"], "export config")
+    ok([r["id"] for r in exported["action_rules"]] == ["movies", "keep2", "tagged", "force"], "export config")
 
     ok(call("/run", {"dry_run": "1"})[0] == 302, "dry run")
     ok(not changes(), "dry run changed nothing in Radarr or Sonarr")
@@ -331,6 +337,12 @@ def monitor(cfg):
     # precondition tag: Show C (tagged cleanup) unmonitored, Show B (no tag) untouched; this rule deletes nothing
     ok(not sonarr_episodes[301]["monitored"] and "/api/v3/episodefile/3010" not in deleted, "Show C (tagged): unmonitored, file kept")
     ok(sonarr_episodes[201]["monitored"] and not any("/201" in p or "2010" in p for _, _, p in writes), "Show B (not tagged): untouched")
+    # season unmonitor: Show C S01 has no monitored episode left → season off; Show A S01 still has E05 → stays on
+    ok(not sonarr_series[3]["seasons"][0]["monitored"], "Show C S01: last episode unmonitored → season unmonitored")
+    ok(sonarr_series[1]["seasons"][0]["monitored"] and sonarr_series[2]["seasons"][0]["monitored"], "Show A/B S01: episodes still monitored → season stays monitored")
+    # force: Show D E01 + E03 watched, E02 skipped → keep2 leaves the season on, the force rule turns it off at E03 (the last)
+    ok(not sonarr_series[4]["seasons"][0]["monitored"] and sonarr_episodes[402]["monitored"] and not sonarr_episodes[403]["monitored"],
+       "Show D S01 (force): last episode watched → season unmonitored though E02 was skipped")
 
     processed = json.loads(call("/api/state")[1]).get("processed", {})
     ok({"movies:movie:tt0133093", "movies:movie:tt1375666"} <= set(processed) and "movies:movie:tt1160419" not in processed,
