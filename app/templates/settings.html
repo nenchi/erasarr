@@ -311,6 +311,16 @@
 
       <div class="toggle-row">
         <div>
+          <div class="toggle-label">Force Unmonitor Season</div>
+          <div class="toggle-desc">A season is always unmonitored once all its episodes are. With this on, unmonitor it as soon as its <strong>last episode</strong> is watched, even if earlier episodes were skipped. Needs Unmonitor.</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="rule-force-unmonitor-season"><span class="toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
           <div class="toggle-label">Delete File</div>
           <div class="toggle-desc">Delete the media file from disk after watched ⚠ irreversible</div>
         </div>
@@ -559,6 +569,7 @@ function openRuleModal(ruleId) {
     document.getElementById('rule-precondition-tag').value = rule.precondition_tag || '';
     const acts = rule.actions || {};
     document.getElementById('rule-unmonitor').checked = !!acts.unmonitor;
+    document.getElementById('rule-force-unmonitor-season').checked = !!acts.force_unmonitor_season;
     document.getElementById('rule-delete-file').checked = !!acts.delete_file;
     document.getElementById('rule-delete-from-emby').checked = !!acts.delete_from_emby;
     document.getElementById('rule-require-all-watched').checked = !!acts.require_all_users_watched;
@@ -596,6 +607,7 @@ function openRuleModal(ruleId) {
     document.getElementById('rule-content-type').value = 'all';
     document.getElementById('rule-precondition-tag').value = '';
     document.getElementById('rule-unmonitor').checked = true;
+    document.getElementById('rule-force-unmonitor-season').checked = false;
     document.getElementById('rule-delete-file').checked = false;
     document.getElementById('rule-delete-from-emby').checked = false;
     document.getElementById('rule-require-all-watched').checked = false;
@@ -663,6 +675,7 @@ async function saveRule() {
     all_servers: allServersCb.checked,
     applies_to_servers: selectedServers,
     unmonitor: document.getElementById('rule-unmonitor').checked,
+    force_unmonitor_season: document.getElementById('rule-force-unmonitor-season').checked,
     delete_file: document.getElementById('rule-delete-file').checked,
     delete_from_emby: document.getElementById('rule-delete-from-emby').checked,
     require_all_users_watched: document.getElementById('rule-require-all-watched').checked,

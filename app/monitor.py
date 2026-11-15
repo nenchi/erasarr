@@ -374,6 +374,27 @@ class SonarrClient:
         episode["monitored"] = False
         return self._put(f"/episode/{episode['id']}", episode)
 
+    def unmonitor_season_if_done(self, series_id: int, season: int, last_ep_done: int = 0) -> bool:
+        """Unmonitor a season once none of its episodes are monitored any more.
+        Not-yet-aired episodes stay monitored, so an airing season is left alone.
+        last_ep_done > 0 (force): unmonitor as soon as the season's last episode
+        (highest number Sonarr knows) was processed, even if earlier ones are still monitored."""
+        if season == 0:
+            return False
+        eps = [ep for ep in self.get_episodes(series_id) if ep["seasonNumber"] == season]
+        if last_ep_done:
+            if not eps or last_ep_done < max(ep["episodeNumber"] for ep in eps):
+                return False
+        elif any(ep.get("monitored") for ep in eps):
+            return False
+        series_data = self._get(f"/series/{series_id}")
+        for s in series_data.get("seasons", []):
+            if s.get("seasonNumber") == season and s.get("monitored"):
+                s["monitored"] = False
+                self._put(f"/series/{series_id}", series_data)
+                return True
+        return False
+
     def get_episode_file_size(self, episode: dict) -> int:
         """Return file size in bytes for an episode, or 0 if unavailable."""
         file_id = episode.get("episodeFileId", 0)
@@ -1177,6 +1198,7 @@ class ErasarrMonitor:
                 # Track which (sonarr_instance_id, series_id) combos have been tagged
                 # this run — tag is show-level, no need to re-apply for every episode
                 tagged_series_this_run: set = set()
+                touched_seasons: dict = {}  # (sid, series_id, season) -> (SonarrClient, show title, highest ep unmonitored)
 
                 for item in rule_watched:
                     if item["type"] != "Episode":
@@ -1311,6 +1333,8 @@ class ErasarrMonitor:
                                 if rule_actions.get("unmonitor"):
                                     sonarr.unmonitor_episode(ep_data)
                                     self._log("      ✓ Unmonitored")
+                                    _prev = touched_seasons.get((sid, series["id"], season), (0, 0, 0))[2]
+                                    touched_seasons[(sid, series["id"], season)] = (sonarr, series["title"], max(_prev, episode_num))
                                 if action_tag_id:
                                     _tag_key = (sid, series["id"])
                                     if _tag_key not in tagged_series_this_run:
@@ -1397,6 +1421,8 @@ class ErasarrMonitor:
                                 if rule_actions.get("unmonitor"):
                                     _sonarr.unmonitor_episode(_ep_data)
                                     self._log("      ✓ Unmonitored")
+                                    _prev = touched_seasons.get((_inst_sid, _ser_id, _s), (0, 0, 0))[2]
+                                    touched_seasons[(_inst_sid, _ser_id, _s)] = (_sonarr, _show_title, max(_prev, _e))
                                 if _act_tag_id:
                                     _tk = (_inst_sid, _ser_id)
                                     if _tk not in tagged_series_this_run:
@@ -1419,6 +1445,16 @@ class ErasarrMonitor:
                                     })
                             except Exception as _err2:
                                 self._log(f"      ✗ Failed: {_ep_label}: {_err2}", "error")
+
+                # ── Season unmonitor: last monitored episode of a season was just unmonitored ──
+                _force_season = bool(rule_actions.get("force_unmonitor_season", False))
+                for (_, _ser_id, _s), (_sonarr, _title, _max_e) in touched_seasons.items():
+                    try:
+                        if _sonarr.unmonitor_season_if_done(_ser_id, _s, _max_e if _force_season else 0):
+                            _why = "last episode watched" if _force_season else "all episodes unmonitored"
+                            self._log(f"    📺 {_title} Season {_s}: {_why} → season unmonitored")
+                    except Exception as _err3:
+                        self._log(f"      ✗ Failed to unmonitor {_title} Season {_s}: {_err3}", "error")
 
             # ── Media Server Direct Delete (episodes not managed by Sonarr) ──
             # Applies to both Emby and Jellyfin servers.
